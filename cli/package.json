@@ -1,0 +1,30 @@
+{
+  "name": "@openclaw/a2a-cli",
+  "version": "0.1.0",
+  "description": "DevTools CLI for A2A protocol — httpie for agent-to-agent communication",
+  "type": "module",
+  "bin": {
+    "a2a": "./dist/bin/a2a.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx bin/a2a.ts",
+    "test": "node --import tsx --test tests/**/*.test.ts"
+  },
+  "keywords": ["a2a", "agent", "cli", "devtools", "openclaw"],
+  "license": "MIT",
+  "dependencies": {
+    "@a2a-js/sdk": "^0.3.13",
+    "chalk": "^5.4.1",
+    "cli-table3": "^0.6.5",
+    "commander": "^13.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.2",
+    "tsx": "^4.19.4",
+    "typescript": "^5.8.3"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

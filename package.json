@@ -1,0 +1,53 @@
+{
+  "name": "openclaw-a2a",
+  "version": "1.4.3-tunnel.3",
+  "type": "module",
+  "description": "OpenClaw A2A Gateway with embedded a2a-relay tunnel-client (fork; originals untouched)",
+  "main": "index.ts",
+  "keywords": [
+    "openclaw",
+    "a2a",
+    "agent-to-agent",
+    "plugin",
+    "multi-agent",
+    "gateway",
+    "tunnel",
+    "nat"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/win4r/openclaw-a2a-gateway.git"
+  },
+  "homepage": "https://github.com/win4r/openclaw-a2a-gateway#readme",
+  "scripts": {
+    "test": "npx tsx --test tests/*.test.ts",
+    "test:tunnel": "npx tsx --test tests/tunnel-integration.test.ts",
+    "smoke:tunnel": "npx tsx scripts/tunnel-smoke.ts"
+  },
+  "dependencies": {
+    "@a2a-js/sdk": "^0.3.13",
+    "@bufbuild/protobuf": "^2.11.0",
+    "@grpc/grpc-js": "^1.14.3",
+    "express": "^4.21.2",
+    "multicast-dns": "^7.2.5",
+    "tsx": "^4.19.0",
+    "uuid": "^9.0.1",
+    "ws": "^8.17.0"
+  },
+  "openclaw": {
+    "extensions": [
+      "./index.ts"
+    ]
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.6",
+    "@types/node": "^25.3.0",
+    "@types/supertest": "^2.0.16",
+    "@types/uuid": "^10.0.0",
+    "@types/ws": "^8.5.13",
+    "openclaw": "^2026.3.2",
+    "supertest": "^7.1.4",
+    "typescript": "^5.9.3"
+  }
+}

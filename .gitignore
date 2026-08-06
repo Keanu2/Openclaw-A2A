@@ -1,0 +1,18 @@
+node_modules/
+dist/
+coverage/
+.DS_Store
+*.log
+data/
+plan-*.md
+research-*.md
+
+# Local device dumps / secrets — never commit
+tmp-*
+.env
+.env.*
+*.pem
+credentials.json
+
+openclaw.lnk
+

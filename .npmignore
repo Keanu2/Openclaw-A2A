@@ -1,0 +1,11 @@
+tests/
+cli/
+docs/
+research/
+data/
+.github/
+*.test.ts
+tsconfig.json
+CHANGELOG.md
+TEST-REPORT.md
+A2A_SDK_REVIEW_CN.md

@@ -1,6 +1,6 @@
 # A2A Compatibility Matrix
 
-This document tracks interoperability between the OpenClaw A2A Gateway and other A2A protocol implementations.
+This document tracks interoperability between the OpenClaw A2A Gateway (`a2a-gateway`, package `openclaw-a2a` **1.4.3-tunnel.3**) and other A2A protocol implementations.
 
 ## Protocol Coverage
 

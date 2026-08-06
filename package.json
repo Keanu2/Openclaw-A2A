@@ -17,9 +17,9 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/win4r/openclaw-a2a-gateway.git"
+    "url": "https://github.com/Keanu2/Openclaw-A2A.git"
   },
-  "homepage": "https://github.com/win4r/openclaw-a2a-gateway#readme",
+  "homepage": "https://github.com/Keanu2/Openclaw-A2A#readme",
   "scripts": {
     "test": "npx tsx --test tests/*.test.ts",
     "test:tunnel": "npx tsx --test tests/tunnel-integration.test.ts",

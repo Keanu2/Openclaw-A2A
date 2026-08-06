@@ -18,7 +18,7 @@ Configure the OpenClaw A2A Gateway plugin for cross-server agent-to-agent commun
 ```bash
 mkdir -p <WORKSPACE>/plugins
 cd <WORKSPACE>/plugins
-git clone https://github.com/win4r/openclaw-a2a-gateway.git a2a-gateway
+git clone https://github.com/Keanu2/Openclaw-A2A.git a2a-gateway
 cd a2a-gateway
 npm install --production
 ```

@@ -27,13 +27,12 @@ openclaw gateway
 
 | 文档 | 说明 |
 |------|------|
-| [docs/操作手册.md](./docs/操作手册.md) | 安装、直连 / NAT、注册中心、配置与排障（完整步骤） |
-| [docs/README.md](./docs/README.md) | 文档索引 |
-| [docs/工作文档/](./docs/工作文档/) | 改动说明、测试报告等历史记录 |
+| [docs/操作手册.md](./docs/操作手册.md) | 安装、直连 / NAT、注册中心、配置与排障 |
+| [docs/源码修改说明.md](./docs/源码修改说明.md) | 相对上游的主要源码增量 |
 | [docs/COMPATIBILITY.md](./docs/COMPATIBILITY.md) | A2A 兼容性说明 |
 | [CHANGELOG.md](./CHANGELOG.md) | 版本变更 |
 
-本地文件名规则（摘要）：发送侧传输名 = `path` 的 basename；线上 FilePart 为 `{ name, mimeType, bytes }`。详情见操作手册与 [2026-08-06 改动说明](./docs/工作文档/2026-08-06-改动说明-传输文件名加固与仓库重命名.md)。
+本地文件名规则（摘要）：发送侧传输名 = `path` 的 basename；线上 FilePart 为 `{ name, mimeType, bytes }`。详见操作手册与源码修改说明。
 
 ## License
 

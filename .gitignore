@@ -16,3 +16,7 @@ credentials.json
 
 openclaw.lnk
 
+# Local-only work notes / test writeups (not published)
+docs/工作文档/
+docs/device/workspace-snapshots/
+

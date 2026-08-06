@@ -13,16 +13,12 @@ OpenClaw 的 **A2A Gateway** 插件（嵌入 Tunnel 版）：让两台设备上�
 
 - Agent ↔ Agent 消息与本地文件传输（默认内联上限 50MB）
 - 可选嵌入隧道客户端，跨 NAT 经中继互通
-- 可选注册中心自动发现对端（少写死 peers）
+- 可选注册中心自动发现对端
 
 ## 快速开始
 
 ```bash
-cd Openclaw-A2A
-npm install
-npm run test:tunnel          # 建议先跑通隧道单测
-openclaw plugins install .   # 或按操作手册写入 extensions
-openclaw gateway restart
+openclaw gateway
 ```
 
 要求：Node.js 22+，本机已安装并可启动 OpenClaw Gateway。

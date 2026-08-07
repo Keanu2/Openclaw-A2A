@@ -1,21 +1,17 @@
-node_modules/
-dist/
-coverage/
-.DS_Store
+**/node_modules/
+**/dist/
+**/coverage/
+**/.pnpm-store/
+**/.worktrees/
+**/.DS_Store
+**/.env
+**/.env.*
+!**/.env.example
+**/*.pem
+**/credentials.json
+**/harmony-workspace/
+**/memory/
+**/.agent/
+**/.agents/
+**/.pi/
 *.log
-data/
-plan-*.md
-research-*.md
-
-# Local device dumps / secrets — never commit
-tmp-*
-.env
-.env.*
-*.pem
-credentials.json
-
-openclaw.lnk
-
-# Local-only archives live outside this repo (D:\openclaw\_local-only-Openclaw-A2A)
-docs/工作文档/
-docs/device/workspace-snapshots/

@@ -1,7 +1,0 @@
-tests/
-cli/
-docs/
-.github/
-*.test.ts
-tsconfig.json
-CHANGELOG.md

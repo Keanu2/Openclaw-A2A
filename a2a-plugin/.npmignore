@@ -1,0 +1,11 @@
+tests/
+cli/
+docs/
+.github/
+scripts/*-smoke.ts
+.tmp*
+.tmp-*/
+*.tgz
+*.test.ts
+tsconfig.json
+CHANGELOG.md

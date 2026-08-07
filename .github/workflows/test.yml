@@ -9,6 +9,9 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: a2a-plugin
     strategy:
       matrix:
         node-version: [22, 25]

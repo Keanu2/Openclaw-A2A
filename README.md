@@ -1,4 +1,4 @@
-# OpenClaw A2A 定制发布仓库
+# OpenClaw A2A 代码仓库
 
 本仓库按用途分为三个独立部分：
 
@@ -16,5 +16,3 @@
 
 只开发 A2A 插件时进入 [`a2a-plugin/`](./a2a-plugin/)；需要重新构建完整
 OpenClaw 安装包时进入 [`openclaw-source/`](./openclaw-source/)。
-
-> `node_modules`、构建产物、设备工作区、Agent 记忆和本地凭据不进入仓库。

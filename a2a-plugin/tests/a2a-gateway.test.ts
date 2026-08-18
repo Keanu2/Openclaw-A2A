@@ -24,6 +24,7 @@ describe("zero-config install (issue #7)", () => {
     assert.ok(harness.service, "service should be registered even with empty config");
     assert.ok(harness.methods.has("a2a.send"), "a2a.send method should be registered");
     assert.ok(harness.methods.has("a2a.send_local_file"), "a2a.send_local_file method should be registered");
+    assert.ok(harness.methods.has("a2a.send_file"), "a2a.send_file TCP streaming method should be registered");
     assert.ok(harness.methods.has("a2a.metrics"), "a2a.metrics method should be registered");
     assert.ok(harness.methods.has("a2a.registry.register"), "a2a.registry.register should be registered");
     assert.ok(harness.methods.has("a2a.registry.list"), "a2a.registry.list should be registered");

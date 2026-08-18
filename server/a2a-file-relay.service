@@ -1,0 +1,24 @@
+[Unit]
+Description=OpenClaw A2A bounded TCP file relay
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=edge
+Group=edge
+WorkingDirectory=/home/edge/openclaw-a2a-edge
+Environment=A2A_FILE_RELAY_HOST=127.0.0.1
+Environment=A2A_FILE_RELAY_PORT=19182
+Environment=A2A_FILE_RELAY_MAX_BYTES=1073741824
+Environment=A2A_FILE_RELAY_WAIT_MS=1800000
+ExecStart=/usr/bin/node /home/edge/openclaw-a2a-edge/file-relay.js
+Restart=on-failure
+RestartSec=3
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target

@@ -10,6 +10,7 @@ import type { Server } from "node:http";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { performance } from "node:perf_hooks";
 
 import { AGENT_CARD_PATH } from "@a2a-js/sdk";
 import { DefaultRequestHandler } from "@a2a-js/sdk/server";
@@ -73,6 +74,15 @@ import {
   parseSaturationConfig,
   type SaturationConfig,
 } from "./src/saturation-model.js";
+import {
+  inspectFile,
+  newTransferId,
+  newTransferTicket,
+  sendFilePayload,
+  startFileReceive,
+  type FileOffer,
+  type ReceiveResult,
+} from "./src/file-transfer.js";
 
 /** Build a JSON-RPC error response. */
 function jsonRpcError(id: string | number | null, code: number, message: string) {
@@ -246,6 +256,7 @@ export function parseConfig(raw: unknown, resolvePath?: (nextPath: string) => st
   const retry = asObject(resilience.retry);
   const circuitBreaker = asObject(resilience.circuitBreaker);
   const discoveryRaw = config.discovery ? asObject(config.discovery) : undefined;
+  const fileTransfer = asObject(config.fileTransfer);
 
   const inboundAuth = asString(security.inboundAuth, "none") as InboundAuth;
 
@@ -404,6 +415,21 @@ export function parseConfig(raw: unknown, resolvePath?: (nextPath: string) => st
         tempDir: resolveConfiguredPath(tempDir, tempDir, resolvePath),
       };
     })(),
+    fileTransfer: config.fileTransfer ? {
+      enabled: asBoolean(fileTransfer.enabled, false),
+      host: asString(fileTransfer.host, ""),
+      port: Math.floor(asNumber(fileTransfer.port, 8001)),
+      serverName: asString(fileTransfer.serverName, "a2a-file.invalid"),
+      certificateSha256: asString(fileTransfer.certificateSha256, "") || undefined,
+      receiveDir: resolveConfiguredPath(
+        fileTransfer.receiveDir,
+        defaultOpenClawDataDir("a2a-files"),
+        resolvePath,
+      ),
+      maxFileSizeBytes: Math.max(0, Math.floor(asNumber(fileTransfer.maxFileSizeBytes, 1_073_741_824))),
+      connectTimeoutMs: Math.max(1_000, Math.floor(asNumber(fileTransfer.connectTimeoutMs, 15_000))),
+      transferTimeoutMs: Math.max(10_000, Math.floor(asNumber(fileTransfer.transferTimeoutMs, 1_800_000))),
+    } : undefined,
   };
 }
 
@@ -659,6 +685,42 @@ const plugin = {
     const a2aJsonBodyLimit = Math.ceil(config.security.maxInlineFileSizeBytes * 1.4) + 1_048_576;
     const a2aJsonParser = express.json({ limit: a2aJsonBodyLimit });
     app.use(a2aJsonParser);
+
+    // Internal file-transfer control plane. This endpoint is reached through
+    // the existing A2A WebSocket tunnel; file bytes never enter this request.
+    const activeFileReceives = new Map<string, Promise<ReceiveResult>>();
+    app.post("/a2a/file-transfer/prepare", async (req, res) => {
+      try {
+        const fileConfig = config.fileTransfer;
+        if (!fileConfig?.enabled) {
+          res.status(503).json({ ok: false, error: "fileTransfer is disabled" });
+          return;
+        }
+        const offer = asObject(req.body) as unknown as FileOffer;
+        if (activeFileReceives.has(offer.transferId)) {
+          res.status(409).json({ ok: false, error: "transferId is already active" });
+          return;
+        }
+        if (config.tunnel?.deviceId && offer.targetDevice !== config.tunnel.deviceId) {
+          res.status(403).json({ ok: false, error: "targetDevice does not match this gateway" });
+          return;
+        }
+        const receive = startFileReceive(fileConfig, offer);
+        activeFileReceives.set(offer.transferId, receive.completed);
+        receive.completed
+          .then((result) => api.logger.info(
+            `a2a-file-transfer: received id=${result.transferId} size=${result.size} path=${result.path}`,
+          ))
+          .catch((error: unknown) => api.logger.warn(
+            `a2a-file-transfer: receive failed id=${offer.transferId}: ${error instanceof Error ? error.message : String(error)}`,
+          ))
+          .finally(() => activeFileReceives.delete(offer.transferId));
+        await receive.ready;
+        res.json({ ok: true, transferId: offer.transferId, receiverReady: true });
+      } catch (error) {
+        res.status(400).json({ ok: false, error: error instanceof Error ? error.message : String(error) });
+      }
+    });
 
     const createHttpMetricsMiddleware =
       (route: "jsonrpc" | "rest" | "metrics") =>
@@ -1089,6 +1151,87 @@ const plugin = {
       }
     };
 
+    const sendStreamFileCore = async (params: {
+      peer: string;
+      path: string;
+      mimeType?: string;
+    }) => {
+      const fileConfig = config.fileTransfer;
+      if (!fileConfig?.enabled) return { ok: false as const, error: "fileTransfer is disabled" };
+      if (!fileConfig.host) return { ok: false as const, error: "fileTransfer.host is required" };
+      if (!tunnelSession?.isConnected || !config.tunnel?.deviceId) {
+        return { ok: false as const, error: "A2A tunnel is not connected" };
+      }
+      const peer = findPeer(params.peer);
+      if (!peer?.tunnelDeviceId) {
+        return { ok: false as const, error: `Peer does not have tunnelDeviceId: ${params.peer}` };
+      }
+      const pathCheck = isAllowedLocalPath(params.path);
+      if (!pathCheck.ok) return { ok: false as const, error: `Path rejected: ${pathCheck.reason}` };
+      const filePath = pathCheck.resolved;
+      const mimeType = (params.mimeType && String(params.mimeType).trim()) || detectMimeType(filePath);
+      if (!validateMimeType(mimeType, config.security.allowedMimeTypes)) {
+        return { ok: false as const, error: `MIME type rejected: "${mimeType}" is not in the allowed list` };
+      }
+      try {
+        const hashStarted = performance.now();
+        const inspected = await inspectFile(filePath, fileConfig.maxFileSizeBytes);
+        const hashMs = performance.now() - hashStarted;
+        const offer: FileOffer = {
+          transferId: newTransferId(),
+          ticket: newTransferTicket(),
+          sourceDevice: config.tunnel.deviceId,
+          targetDevice: peer.tunnelDeviceId,
+          name: path.basename(filePath),
+          mimeType,
+          size: inspected.size,
+          sha256: inspected.sha256,
+        };
+        const controlStarted = performance.now();
+        const prepared = await tunnelSession.forward(peer.tunnelDeviceId, {
+          method: "POST",
+          path: "/a2a/file-transfer/prepare",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(offer),
+        }, fileConfig.connectTimeoutMs + 10_000);
+        const controlPrepareMs = performance.now() - controlStarted;
+        if (prepared.status !== 200) {
+          return { ok: false as const, error: `Receiver prepare failed (${prepared.status}): ${prepared.body}` };
+        }
+        const transferred = await sendFilePayload(fileConfig, offer, filePath, controlPrepareMs);
+        return {
+          peer: params.peer,
+          sourcePath: filePath,
+          mimeType,
+          hashMs,
+          ...transferred,
+        };
+      } catch (error) {
+        return { ok: false as const, error: error instanceof Error ? error.message : String(error) };
+      }
+    };
+
+    api.registerGatewayMethod("a2a.send_file", ({ params, respond }) => {
+      const peerName = typeof params?.peer === "string" ? params.peer : "";
+      const filePath = typeof params?.path === "string" ? params.path : "";
+      if (!peerName || !filePath) {
+        respond(false, { error: 'Required params: "peer" and "path"' });
+        return;
+      }
+      void sendStreamFileCore({
+        peer: peerName,
+        path: filePath,
+        mimeType: typeof params?.mimeType === "string" ? params.mimeType : undefined,
+      }).then((result) => {
+        if (result.ok) respond(true, result);
+        else respond(false, result, { message: result.error, code: "UNAVAILABLE" });
+      }).catch((error: unknown) => {
+        const message = error instanceof Error ? error.message : String(error);
+        respond(false, { ok: false, error: message }, { message, code: "UNAVAILABLE" });
+      });
+    });
+    api.logger.info("a2a-gateway: registered gateway method a2a.send_file (TLS/TCP streaming)");
+
     api.registerGatewayMethod("a2a.send_local_file", ({ params, respond }) => {
       const peerName = typeof params?.peer === "string" ? params.peer : "";
       const filePath = typeof params?.path === "string" ? params.path : "";
@@ -1274,10 +1417,11 @@ const plugin = {
     if (api.registerTool) {
       const sendFileParams = {
         type: "object" as const,
-        required: ["peer", "uri"],
+        required: ["peer"],
         properties: {
           peer: { type: "string" as const, description: "Name of the target peer (must match a configured peer name)" },
-          uri: { type: "string" as const, description: "Public URL of the file to send" },
+          path: { type: "string" as const, description: "Absolute LOCAL path. Uses the TLS/TCP streaming data plane and is preferred for local files." },
+          uri: { type: "string" as const, description: "Public URL fallback. Use either path or uri, not both." },
           name: { type: "string" as const, description: "Filename (e.g. report.pdf)" },
           mimeType: { type: "string" as const, description: "MIME type (e.g. application/pdf). Auto-detected from extension if omitted." },
           text: { type: "string" as const, description: "Optional text message to include alongside the file" },
@@ -1287,11 +1431,36 @@ const plugin = {
 
       api.registerTool({
         name: "a2a_send_file",
-        description: "Send a file to a peer agent via A2A. The file is referenced by its public URL (URI). " +
-          "Use this when you need to transfer a document, image, or any file to another agent.",
+        description: "Send a file to a peer via A2A. For a LOCAL path, uses the independent TLS/TCP streaming data plane (no base64, server does not store the file). Public URI mode remains supported.",
         label: "A2A Send File",
         parameters: sendFileParams,
         async execute(toolCallId, params) {
+          if (typeof params.path === "string" && params.path) {
+            const streamed = await sendStreamFileCore({
+              peer: params.peer,
+              path: params.path,
+              mimeType: params.mimeType,
+            });
+            if (streamed.ok) {
+              return {
+                content: [{
+                  type: "text" as const,
+                  text: `【A2A TCP文件发送完成】\n对端 peer: ${params.peer}\n文件: ${streamed.sourcePath}\n大小: ${streamed.size} bytes\nSHA-256: ${streamed.sha256}`,
+                }],
+                details: streamed,
+              };
+            }
+            return {
+              content: [{ type: "text" as const, text: `【A2A TCP文件发送失败】${streamed.error}` }],
+              details: streamed,
+            };
+          }
+          if (typeof params.uri !== "string" || !params.uri) {
+            return {
+              content: [{ type: "text" as const, text: "Required: either local path or public uri" }],
+              details: { ok: false },
+            };
+          }
           const peer = findPeer(params.peer);
           if (!peer) {
             const available = getEffectivePeers().map((p) => p.name).join(", ") || "(none)";

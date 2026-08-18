@@ -4,6 +4,15 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.5.0] - 2026-08-18
+
+### Added
+
+- `a2a.send_file` and local-path support in `a2a_send_file`, using a TLS/TCP streaming data plane while the existing A2A tunnel remains the control plane.
+- Receiver-side bounded streaming, SHA-256 verification, `.part` cleanup and atomic rename.
+- Short-lived per-transfer pairing tickets, TLS certificate pinning and an independent in-memory File Relay.
+- Nginx SNI routing so A2A control traffic and raw file streams share public TCP 8001 without sharing an application process.
+
 ## [1.4.0] - 2026-04-04
 
 ### Added

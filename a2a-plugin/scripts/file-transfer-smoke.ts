@@ -24,6 +24,8 @@ const config: FileTransferConfig = {
   certificateSha256,
   receiveDir,
   maxFileSizeBytes: 1024 * 1024 * 1024,
+  maxConcurrentReceives: 4,
+  maxInFlightBytes: 2 * 1024 * 1024 * 1024,
   connectTimeoutMs: 15_000,
   transferTimeoutMs: 120_000,
 };
@@ -41,7 +43,7 @@ const receive = startFileReceive(config, offer);
 const controlStarted = performance.now();
 await receive.ready;
 const controlPrepareMs = performance.now() - controlStarted;
-const sent = await sendFilePayload(config, offer, inputPath, controlPrepareMs);
+const sent = await sendFilePayload(config, offer, inputPath, controlPrepareMs, inspected);
 const received = await receive.completed;
 if (sent.sha256 !== received.sha256 || sent.size !== received.size) throw new Error("smoke integrity mismatch");
 process.stdout.write(`${JSON.stringify({ sent, received })}\n`);

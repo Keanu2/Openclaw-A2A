@@ -15,3 +15,7 @@
 **/.agents/
 **/.pi/
 *.log
+.device-test/
+artifacts/
+*.key
+*.crt

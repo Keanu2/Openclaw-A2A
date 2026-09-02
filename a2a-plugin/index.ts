@@ -76,12 +76,17 @@ import {
 } from "./src/saturation-model.js";
 import {
   inspectFile,
+  FileTransferStore,
   newTransferId,
   newTransferTicket,
+  publicTransferStatus,
+  recordMatchesOffer,
+  safeTransferName,
   sendFilePayload,
   startFileReceive,
+  validateFileOffer,
   type FileOffer,
-  type ReceiveResult,
+  type ReadyReceive,
 } from "./src/file-transfer.js";
 
 /** Build a JSON-RPC error response. */
@@ -415,21 +420,29 @@ export function parseConfig(raw: unknown, resolvePath?: (nextPath: string) => st
         tempDir: resolveConfiguredPath(tempDir, tempDir, resolvePath),
       };
     })(),
-    fileTransfer: config.fileTransfer ? {
-      enabled: asBoolean(fileTransfer.enabled, false),
-      host: asString(fileTransfer.host, ""),
-      port: Math.floor(asNumber(fileTransfer.port, 8001)),
-      serverName: asString(fileTransfer.serverName, "a2a-file.invalid"),
-      certificateSha256: asString(fileTransfer.certificateSha256, "") || undefined,
-      receiveDir: resolveConfiguredPath(
-        fileTransfer.receiveDir,
-        defaultOpenClawDataDir("a2a-files"),
-        resolvePath,
-      ),
-      maxFileSizeBytes: Math.max(0, Math.floor(asNumber(fileTransfer.maxFileSizeBytes, 1_073_741_824))),
-      connectTimeoutMs: Math.max(1_000, Math.floor(asNumber(fileTransfer.connectTimeoutMs, 15_000))),
-      transferTimeoutMs: Math.max(10_000, Math.floor(asNumber(fileTransfer.transferTimeoutMs, 1_800_000))),
-    } : undefined,
+    fileTransfer: config.fileTransfer ? (() => {
+      const maxFileSizeBytes = Math.max(0, Math.floor(asNumber(fileTransfer.maxFileSizeBytes, 1_073_741_824)));
+      return {
+        enabled: asBoolean(fileTransfer.enabled, false),
+        host: asString(fileTransfer.host, ""),
+        port: Math.floor(asNumber(fileTransfer.port, 8001)),
+        serverName: asString(fileTransfer.serverName, "a2a-file.invalid"),
+        certificateSha256: asString(fileTransfer.certificateSha256, "") || undefined,
+        receiveDir: resolveConfiguredPath(
+          fileTransfer.receiveDir,
+          defaultOpenClawDataDir("a2a-files"),
+          resolvePath,
+        ),
+        maxFileSizeBytes,
+        maxConcurrentReceives: Math.max(1, Math.floor(asNumber(fileTransfer.maxConcurrentReceives, 4))),
+        maxInFlightBytes: Math.max(
+          maxFileSizeBytes,
+          Math.floor(asNumber(fileTransfer.maxInFlightBytes, 2_147_483_648)),
+        ),
+        connectTimeoutMs: Math.max(1_000, Math.floor(asNumber(fileTransfer.connectTimeoutMs, 15_000))),
+        transferTimeoutMs: Math.max(10_000, Math.floor(asNumber(fileTransfer.transferTimeoutMs, 1_800_000))),
+      };
+    })() : undefined,
   };
 }
 
@@ -684,29 +697,58 @@ const plugin = {
     // req._body is already set). base64 inflates ~4/3; add 1MB envelope headroom.
     const a2aJsonBodyLimit = Math.ceil(config.security.maxInlineFileSizeBytes * 1.4) + 1_048_576;
     const a2aJsonParser = express.json({ limit: a2aJsonBodyLimit });
-    app.use(a2aJsonParser);
+    const fileControlJsonParser = express.json({ limit: 32 * 1024 });
 
     // Internal file-transfer control plane. This endpoint is reached through
     // the existing A2A WebSocket tunnel; file bytes never enter this request.
-    const activeFileReceives = new Map<string, Promise<ReceiveResult>>();
-    app.post("/a2a/file-transfer/prepare", async (req, res) => {
+    const fileTransferStore = config.fileTransfer?.enabled ? new FileTransferStore(config.fileTransfer) : undefined;
+    let activeReceiveBytes = 0;
+    const activeFileReceives = new Map<string, { offer: FileOffer; receive: ReadyReceive }>();
+    if (fileTransferStore) {
+      void fileTransferStore.recoverInterrupted().then((count) => {
+        if (count > 0) api.logger.warn(`a2a-file-transfer: recovered ${count} interrupted transfer record(s)`);
+      }).catch((error: unknown) => {
+        api.logger.warn(`a2a-file-transfer: state recovery failed: ${error instanceof Error ? error.message : String(error)}`);
+      });
+    }
+    app.post("/a2a/file-transfer/prepare", fileControlJsonParser, async (req, res) => {
       try {
         const fileConfig = config.fileTransfer;
-        if (!fileConfig?.enabled) {
+        if (!fileConfig?.enabled || !fileTransferStore) {
           res.status(503).json({ ok: false, error: "fileTransfer is disabled" });
           return;
         }
         const offer = asObject(req.body) as unknown as FileOffer;
-        if (activeFileReceives.has(offer.transferId)) {
-          res.status(409).json({ ok: false, error: "transferId is already active" });
-          return;
-        }
+        validateFileOffer(offer, fileConfig.maxFileSizeBytes);
         if (config.tunnel?.deviceId && offer.targetDevice !== config.tunnel.deviceId) {
           res.status(403).json({ ok: false, error: "targetDevice does not match this gateway" });
           return;
         }
-        const receive = startFileReceive(fileConfig, offer);
-        activeFileReceives.set(offer.transferId, receive.completed);
+        const existing = await fileTransferStore.load(offer.transferId);
+        if (existing) {
+          if (!recordMatchesOffer(existing, offer)) {
+            res.status(409).json({ ok: false, error: "transferId belongs to a different file offer" });
+            return;
+          }
+          if (existing.state === "DATA_COMMITTED" || existing.state === "COMPLETED") {
+            res.json({ ...publicTransferStatus(existing), alreadyCommitted: true });
+            return;
+          }
+        }
+        if (activeFileReceives.has(offer.transferId)) {
+          res.status(409).json({ ok: false, error: "transferId is already active" });
+          return;
+        }
+        if (
+          activeFileReceives.size >= fileConfig.maxConcurrentReceives ||
+          activeReceiveBytes + offer.size > fileConfig.maxInFlightBytes
+        ) {
+          res.status(429).json({ ok: false, error: "receiver is busy", code: "BUSY" });
+          return;
+        }
+        const receive = startFileReceive(fileConfig, offer, { store: fileTransferStore });
+        activeReceiveBytes += offer.size;
+        activeFileReceives.set(offer.transferId, { offer, receive });
         receive.completed
           .then((result) => api.logger.info(
             `a2a-file-transfer: received id=${result.transferId} size=${result.size} path=${result.path}`,
@@ -714,13 +756,50 @@ const plugin = {
           .catch((error: unknown) => api.logger.warn(
             `a2a-file-transfer: receive failed id=${offer.transferId}: ${error instanceof Error ? error.message : String(error)}`,
           ))
-          .finally(() => activeFileReceives.delete(offer.transferId));
+          .finally(() => {
+            activeFileReceives.delete(offer.transferId);
+            activeReceiveBytes = Math.max(0, activeReceiveBytes - offer.size);
+          });
         await receive.ready;
         res.json({ ok: true, transferId: offer.transferId, receiverReady: true });
       } catch (error) {
         res.status(400).json({ ok: false, error: error instanceof Error ? error.message : String(error) });
       }
     });
+
+    app.post("/a2a/file-transfer/status", fileControlJsonParser, async (req, res) => {
+      try {
+        if (!fileTransferStore) return void res.status(503).json({ ok: false, error: "fileTransfer is disabled" });
+        const transferId = asString(asObject(req.body).transferId, "");
+        const status = transferId ? await fileTransferStore.getPublicStatus(transferId) : null;
+        if (!status) return void res.status(404).json({ ok: false, error: "transfer not found" });
+        res.json(status);
+      } catch (error) {
+        res.status(400).json({ ok: false, error: error instanceof Error ? error.message : String(error) });
+      }
+    });
+
+    app.post("/a2a/file-transfer/cancel", fileControlJsonParser, async (req, res) => {
+      try {
+        if (!fileTransferStore) return void res.status(503).json({ ok: false, error: "fileTransfer is disabled" });
+        const transferId = asString(asObject(req.body).transferId, "");
+        const active = activeFileReceives.get(transferId);
+        if (active) {
+          active.receive.cancel("canceled by sender");
+          return void res.status(202).json({ ok: true, transferId, cancelRequested: true });
+        }
+        const status = transferId ? await fileTransferStore.getPublicStatus(transferId) : null;
+        if (!status) return void res.status(404).json({ ok: false, error: "transfer not found" });
+        if (status.state === "DATA_COMMITTED" || status.state === "COMPLETED") {
+          return void res.status(409).json({ ...status, ok: false, error: "file is already committed" });
+        }
+        res.json(status);
+      } catch (error) {
+        res.status(400).json({ ok: false, error: error instanceof Error ? error.message : String(error) });
+      }
+    });
+
+    app.use(a2aJsonParser);
 
     const createHttpMetricsMiddleware =
       (route: "jsonrpc" | "rest" | "metrics") =>
@@ -1155,6 +1234,8 @@ const plugin = {
       peer: string;
       path: string;
       mimeType?: string;
+      text?: string;
+      agentId?: string;
     }) => {
       const fileConfig = config.fileTransfer;
       if (!fileConfig?.enabled) return { ok: false as const, error: "fileTransfer is disabled" };
@@ -1182,7 +1263,7 @@ const plugin = {
           ticket: newTransferTicket(),
           sourceDevice: config.tunnel.deviceId,
           targetDevice: peer.tunnelDeviceId,
-          name: path.basename(filePath),
+          name: safeTransferName(path.basename(filePath)),
           mimeType,
           size: inspected.size,
           sha256: inspected.sha256,
@@ -1198,13 +1279,102 @@ const plugin = {
         if (prepared.status !== 200) {
           return { ok: false as const, error: `Receiver prepare failed (${prepared.status}): ${prepared.body}` };
         }
-        const transferred = await sendFilePayload(fileConfig, offer, filePath, controlPrepareMs);
+        let prepareBody: Record<string, unknown> = {};
+        try {
+          prepareBody = asObject(JSON.parse(prepared.body));
+        } catch {
+          return { ok: false as const, error: "Receiver prepare returned invalid JSON" };
+        }
+
+        let transferred: Awaited<ReturnType<typeof sendFilePayload>> | undefined;
+        let dataCommitted = prepareBody.alreadyCommitted === true;
+        if (!dataCommitted) {
+          try {
+            transferred = await sendFilePayload(fileConfig, offer, filePath, controlPrepareMs, inspected);
+            dataCommitted = true;
+          } catch (sendError) {
+            const statusResponse = await tunnelSession.forward(peer.tunnelDeviceId, {
+              method: "POST",
+              path: "/a2a/file-transfer/status",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify({ transferId: offer.transferId }),
+            }, fileConfig.connectTimeoutMs + 10_000).catch(() => null);
+            if (statusResponse?.status === 200) {
+              try {
+                const statusBody = asObject(JSON.parse(statusResponse.body));
+                dataCommitted = statusBody.state === "DATA_COMMITTED" || statusBody.state === "COMPLETED";
+              } catch {
+                dataCommitted = false;
+              }
+            }
+            if (!dataCommitted) {
+              await tunnelSession.forward(peer.tunnelDeviceId, {
+                method: "POST",
+                path: "/a2a/file-transfer/cancel",
+                headers: { "content-type": "application/json" },
+                body: JSON.stringify({ transferId: offer.transferId }),
+              }, fileConfig.connectTimeoutMs + 10_000).catch(() => undefined);
+              throw sendError;
+            }
+          }
+        }
+
+        const notificationParts: Array<Record<string, unknown>> = [];
+        if (params.text) notificationParts.push({ kind: "text", text: params.text });
+        notificationParts.push({
+          kind: "file",
+          file: {
+            uri: `a2a-transfer://${offer.transferId}`,
+            name: offer.name,
+            mimeType: offer.mimeType,
+          },
+        });
+        const notification: Record<string, unknown> = {
+          messageId: `file-${offer.transferId}`,
+          parts: notificationParts,
+        };
+        if (params.agentId) notification.agentId = params.agentId;
+        let notified: Awaited<ReturnType<typeof client.sendMessage>>;
+        try {
+          notified = await client.sendMessage(peer, notification, {
+            healthManager: healthManager ?? undefined,
+            retryConfig: config.resilience.retry,
+          });
+        } catch (notificationError) {
+          return {
+            ok: false as const,
+            dataCommitted: true as const,
+            transferId: offer.transferId,
+            error: `File data committed, but A2A notification failed: ${notificationError instanceof Error ? notificationError.message : String(notificationError)}`,
+          };
+        }
+        if (!notified.ok) {
+          return {
+            ok: false as const,
+            dataCommitted: true as const,
+            transferId: offer.transferId,
+            error: `File data committed, but A2A notification failed: ${JSON.stringify(notified.response)}`,
+          };
+        }
         return {
+          ok: true as const,
           peer: params.peer,
           sourcePath: filePath,
           mimeType,
           hashMs,
-          ...transferred,
+          transferId: offer.transferId,
+          size: offer.size,
+          sha256: offer.sha256,
+          dataCommitted: true as const,
+          notificationOk: true as const,
+          ...(transferred ? {
+            controlPrepareMs: transferred.controlPrepareMs,
+            senderSetupMs: transferred.senderSetupMs,
+            senderPayloadMs: transferred.senderPayloadMs,
+            senderAckWaitMs: transferred.senderAckWaitMs,
+            transferMs: transferred.transferMs,
+          } : { alreadyCommitted: true as const, controlPrepareMs }),
+          response: notified.response,
         };
       } catch (error) {
         return { ok: false as const, error: error instanceof Error ? error.message : String(error) };
@@ -1222,6 +1392,8 @@ const plugin = {
         peer: peerName,
         path: filePath,
         mimeType: typeof params?.mimeType === "string" ? params.mimeType : undefined,
+        text: typeof params?.text === "string" ? params.text : undefined,
+        agentId: typeof params?.agentId === "string" ? params.agentId : undefined,
       }).then((result) => {
         if (result.ok) respond(true, result);
         else respond(false, result, { message: result.error, code: "UNAVAILABLE" });
@@ -1440,6 +1612,8 @@ const plugin = {
               peer: params.peer,
               path: params.path,
               mimeType: params.mimeType,
+              text: params.text,
+              agentId: params.agentId,
             });
             if (streamed.ok) {
               return {
@@ -1873,6 +2047,22 @@ const plugin = {
       async stop(_ctx) {
         // Stop mDNS self-advertisement (sends goodbye packet)
         mdnsResponder?.stop();
+
+        // Stop accepting useful progress from active file receivers and give
+        // their shared cleanup path a bounded chance to remove partial files.
+        const activeReceiveCompletions = [...activeFileReceives.values()].map(({ receive }) => {
+          receive.cancel("gateway shutting down");
+          return receive.completed;
+        });
+        if (activeReceiveCompletions.length > 0) {
+          await Promise.race([
+            Promise.allSettled(activeReceiveCompletions),
+            new Promise<void>((resolve) => {
+              const timer = setTimeout(resolve, 5_000);
+              timer.unref();
+            }),
+          ]);
+        }
 
         // Stop DNS-SD discovery (quorum manager stops the underlying DNS manager)
         if (quorumManager) {

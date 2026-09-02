@@ -19,6 +19,8 @@ plugin.fileTransfer = {
   certificateSha256: "6086a975186fe2e7edec1307e929c0d191551860bed571fa8820d56464e10a6b",
   receiveDir,
   maxFileSizeBytes: 1073741824,
+  maxConcurrentReceives: 4,
+  maxInFlightBytes: 2147483648,
   connectTimeoutMs: 15000,
   transferTimeoutMs: 1800000,
 };

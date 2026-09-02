@@ -13,6 +13,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Short-lived per-transfer pairing tickets, TLS certificate pinning and an independent in-memory File Relay.
 - Nginx SNI routing so A2A control traffic and raw file streams share public TCP 8001 without sharing an application process.
 
+### Fixed
+
+- Hardened File Relay registration parsing, zero-byte transfers, disconnect handling, progress-based stall timeouts, graceful shutdown and bounded session/connection/in-flight resources.
+- Made receive commits durable and no-clobber with complete writes, file/directory sync, persistent transfer states, restart recovery, status and cancel endpoints.
+- Bound sends to a verified source-file snapshot and close sockets/file descriptors on every failure path.
+- Added post-commit `a2a-transfer://` FilePart notification so the receiver agent sees the saved file; ambiguous final-ACK failures now query durable receiver state before any retry.
+- Added filename portability rules, strict ACK identity checks, small control-plane body limits and relay failure-path tests in CI.
+
 ## [1.4.0] - 2026-04-04
 
 ### Added

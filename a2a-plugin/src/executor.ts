@@ -15,6 +15,7 @@ import {
   decodedBase64Size,
   sanitizeUriForLog,
 } from "./file-security.js";
+import { resolveCommittedTransferUriSync, type FileTransferConfig } from "./file-transfer.js";
 
 const DEFAULT_AGENT_RESPONSE_TIMEOUT_MS = 300_000;
 const GATEWAY_CONNECT_TIMEOUT_MS = 10_000;
@@ -214,6 +215,7 @@ function extensionForMime(
  * Global directory for saved inbound files. Set during executor construction.
  */
 let fileTempDir: string = path.join(os.tmpdir(), "a2a-files");
+let fileTransferReceiveConfig: Pick<FileTransferConfig, "receiveDir"> | undefined;
 
 /**
  * Sanitize an inbound file name for safe disk use (basename only, no path separators).
@@ -313,6 +315,26 @@ function formatFilePartAsText(obj: Record<string, unknown>): string {
   // URI-based file
   const uri = asString(file.uri);
   if (uri) {
+    if (uri.startsWith("a2a-transfer:")) {
+      const resolved = fileTransferReceiveConfig
+        ? resolveCommittedTransferUriSync(fileTransferReceiveConfig, uri, name, mimeType)
+        : null;
+      if (!resolved) {
+        return `【A2A 文件接收失败】无效、未完成或已丢失的流式文件引用: ${sanitizeUriForLog(uri)}`;
+      }
+      const sizeKB = Math.ceil(resolved.size / 1024);
+      return (
+        `【A2A 文件接收成功】\n` +
+        `传输文件名: ${resolved.name}\n` +
+        `类型: ${resolved.mimeType}\n` +
+        `大小: ${resolved.size} bytes (${sizeKB}KB)\n` +
+        `SHA-256: ${resolved.sha256}\n` +
+        `保存路径: ${resolved.path}\n` +
+        `\n` +
+        `请在聊天窗口用中文明确告知用户：接收成功。\n` +
+        `必须原样完整报出上一行「保存路径」的绝对路径，禁止编造或改写路径。`
+      );
+    }
     return (
       `【A2A 文件引用】\n` +
       `原文件名: ${name}\n` +
@@ -1208,6 +1230,9 @@ export class OpenClawAgentExecutor implements AgentExecutor {
     // Set up file temp directory for saving received base64 files
     fileTempDir = config.fileStorage?.tempDir || path.join(os.tmpdir(), "a2a-files");
     fs.mkdirSync(fileTempDir, { recursive: true });
+    fileTransferReceiveConfig = config.fileTransfer?.enabled
+      ? { receiveDir: config.fileTransfer.receiveDir }
+      : undefined;
 
     this.taskContextByTaskId = new Map();
   }
@@ -1509,6 +1534,19 @@ export class OpenClawAgentExecutor implements AgentExecutor {
 
       // URI-based file: scheme + IP literal check + MIME
       if (uri) {
+        if (uri.startsWith("a2a-transfer:")) {
+          const name = asString(file.name);
+          const resolved = fileTransferReceiveConfig
+            ? resolveCommittedTransferUriSync(fileTransferReceiveConfig, uri, name, mimeType)
+            : null;
+          if (!resolved) {
+            return `Invalid or incomplete streamed file reference: ${sanitizeUriForLog(uri)}`;
+          }
+          if (mimeType && !validateMimeType(mimeType, this.security.allowedMimeTypes)) {
+            return `MIME type rejected: "${mimeType}"`;
+          }
+          continue;
+        }
         const schemeCheck = validateUriSchemeAndIp(uri);
         if (schemeCheck) {
           return `URI blocked: ${sanitizeUriForLog(uri)} — ${schemeCheck}`;

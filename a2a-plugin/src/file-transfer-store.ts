@@ -61,6 +61,8 @@ export function createTransferRecord(offer: FileOffer, partPath?: string): FileT
   return {
     version: 1,
     transferId: offer.transferId,
+    ...(offer.attemptId ? { attemptId: offer.attemptId } : {}),
+    ...(offer.transport ? { transport: offer.transport } : {}),
     sourceDevice: offer.sourceDevice,
     targetDevice: offer.targetDevice,
     name: safeTransferName(offer.name),

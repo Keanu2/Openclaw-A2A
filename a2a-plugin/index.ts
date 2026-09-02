@@ -77,6 +77,7 @@ import {
 import {
   inspectFile,
   FileTransferStore,
+  newAttemptId,
   newTransferId,
   newTransferTicket,
   publicTransferStatus,
@@ -86,8 +87,13 @@ import {
   startFileReceive,
   validateFileOffer,
   type FileOffer,
-  type ReadyReceive,
 } from "./src/file-transfer.js";
+import {
+  describeQuicChannel,
+  sendQuicPayload,
+  startQuicReceive,
+} from "./src/quic-provider.js";
+import { ensureOfferAttempt } from "./src/file-transfer-capability.js";
 
 /** Build a JSON-RPC error response. */
 function jsonRpcError(id: string | number | null, code: number, message: string) {
@@ -422,6 +428,8 @@ export function parseConfig(raw: unknown, resolvePath?: (nextPath: string) => st
     })(),
     fileTransfer: config.fileTransfer ? (() => {
       const maxFileSizeBytes = Math.max(0, Math.floor(asNumber(fileTransfer.maxFileSizeBytes, 1_073_741_824)));
+      const quicRaw = asObject(fileTransfer.quic);
+      const quicEnabled = asBoolean(quicRaw.enabled, false);
       return {
         enabled: asBoolean(fileTransfer.enabled, false),
         host: asString(fileTransfer.host, ""),
@@ -441,6 +449,36 @@ export function parseConfig(raw: unknown, resolvePath?: (nextPath: string) => st
         ),
         connectTimeoutMs: Math.max(1_000, Math.floor(asNumber(fileTransfer.connectTimeoutMs, 15_000))),
         transferTimeoutMs: Math.max(10_000, Math.floor(asNumber(fileTransfer.transferTimeoutMs, 1_800_000))),
+        inlinePreferredBelowBytes: Math.max(
+          0,
+          Math.floor(asNumber(fileTransfer.inlinePreferredBelowBytes, 1_048_576)),
+        ),
+        autoPeers: Array.isArray(fileTransfer.autoPeers)
+          ? (fileTransfer.autoPeers as unknown[]).filter((v): v is string => typeof v === "string")
+          : [],
+        order: Array.isArray(fileTransfer.order)
+          ? (fileTransfer.order as unknown[]).filter(
+            (v): v is "inline-base64" | "quic-v7" | "tcp-v1" =>
+              v === "inline-base64" || v === "quic-v7" || v === "tcp-v1",
+          )
+          : undefined,
+        quic: quicEnabled ? {
+          enabled: true,
+          binary: asString(quicRaw.binary, "/data/local/tmp/a2a-rcp/rcp-raw-stream-v7"),
+          extraEnv: (() => {
+            const envObj = asObject(quicRaw.extraEnv);
+            const out: Record<string, string> = {};
+            for (const [k, v] of Object.entries(envObj)) {
+              if (typeof v === "string") out[k] = v;
+            }
+            return out;
+          })(),
+          relayHost: asString(quicRaw.relayHost, asString(fileTransfer.host, "121.37.53.35")),
+          relayPort: Math.floor(asNumber(quicRaw.relayPort, 8008)),
+          connectTimeoutMs: Math.max(1_000, Math.floor(asNumber(quicRaw.connectTimeoutMs, 15_000))),
+          transferTimeoutMs: Math.max(10_000, Math.floor(asNumber(quicRaw.transferTimeoutMs, 1_800_000))),
+          stallTimeoutMs: Math.max(5_000, Math.floor(asNumber(quicRaw.stallTimeoutMs, 120_000))),
+        } : undefined,
       };
     })() : undefined,
   };
@@ -703,7 +741,12 @@ const plugin = {
     // the existing A2A WebSocket tunnel; file bytes never enter this request.
     const fileTransferStore = config.fileTransfer?.enabled ? new FileTransferStore(config.fileTransfer) : undefined;
     let activeReceiveBytes = 0;
-    const activeFileReceives = new Map<string, { offer: FileOffer; receive: ReadyReceive }>();
+    type ActiveReceive = {
+      offer: FileOffer;
+      cancel: (reason?: string) => void;
+      completed: Promise<{ transferId: string; size: number; path: string }>;
+    };
+    const activeFileReceives = new Map<string, ActiveReceive>();
     if (fileTransferStore) {
       void fileTransferStore.recoverInterrupted().then((count) => {
         if (count > 0) api.logger.warn(`a2a-file-transfer: recovered ${count} interrupted transfer record(s)`);
@@ -746,9 +789,68 @@ const plugin = {
           res.status(429).json({ ok: false, error: "receiver is busy", code: "BUSY" });
           return;
         }
+
+        const transport = offer.transport === "quic-v7" ? "quic-v7" : "tcp-v1";
+        let active: ActiveReceive;
+        if (transport === "quic-v7") {
+          if (!fileConfig.quic?.enabled) {
+            res.status(503).json({ ok: false, error: "quic-v7 is not enabled on this gateway" });
+            return;
+          }
+          const quicReceive = startQuicReceive(fileConfig.quic, offer, fileConfig.receiveDir);
+          const channelInfo = describeQuicChannel(offer);
+          active = {
+            offer,
+            cancel: quicReceive.cancel,
+            completed: quicReceive.completed,
+          };
+          activeReceiveBytes += offer.size;
+          activeFileReceives.set(offer.transferId, active);
+          quicReceive.completed
+            .then(async (result) => {
+              await fileTransferStore.save({
+                version: 1,
+                transferId: offer.transferId,
+                attemptId: offer.attemptId,
+                transport: "quic-v7",
+                sourceDevice: offer.sourceDevice,
+                targetDevice: offer.targetDevice,
+                name: offer.name,
+                mimeType: offer.mimeType,
+                size: result.size,
+                sha256: result.sha256,
+                state: "DATA_COMMITTED",
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString(),
+                path: result.path,
+              });
+              api.logger.info(
+                `a2a-file-transfer: quic received id=${result.transferId} size=${result.size} channel=${channelInfo.fingerprint}`,
+              );
+            })
+            .catch((error: unknown) => api.logger.warn(
+              `a2a-file-transfer: quic receive failed id=${offer.transferId}: ${error instanceof Error ? error.message : String(error)}`,
+            ))
+            .finally(() => {
+              activeFileReceives.delete(offer.transferId);
+              activeReceiveBytes = Math.max(0, activeReceiveBytes - offer.size);
+            });
+          await quicReceive.ready;
+          res.json({
+            ok: true,
+            transferId: offer.transferId,
+            attemptId: offer.attemptId,
+            transport: "quic-v7",
+            receiverReady: true,
+            channelFingerprint: channelInfo.fingerprint,
+          });
+          return;
+        }
+
         const receive = startFileReceive(fileConfig, offer, { store: fileTransferStore });
+        active = { offer, cancel: receive.cancel, completed: receive.completed };
         activeReceiveBytes += offer.size;
-        activeFileReceives.set(offer.transferId, { offer, receive });
+        activeFileReceives.set(offer.transferId, active);
         receive.completed
           .then((result) => api.logger.info(
             `a2a-file-transfer: received id=${result.transferId} size=${result.size} path=${result.path}`,
@@ -761,7 +863,13 @@ const plugin = {
             activeReceiveBytes = Math.max(0, activeReceiveBytes - offer.size);
           });
         await receive.ready;
-        res.json({ ok: true, transferId: offer.transferId, receiverReady: true });
+        res.json({
+          ok: true,
+          transferId: offer.transferId,
+          attemptId: offer.attemptId,
+          transport: "tcp-v1",
+          receiverReady: true,
+        });
       } catch (error) {
         res.status(400).json({ ok: false, error: error instanceof Error ? error.message : String(error) });
       }
@@ -785,7 +893,7 @@ const plugin = {
         const transferId = asString(asObject(req.body).transferId, "");
         const active = activeFileReceives.get(transferId);
         if (active) {
-          active.receive.cancel("canceled by sender");
+          active.cancel("canceled by sender");
           return void res.status(202).json({ ok: true, transferId, cancelRequested: true });
         }
         const status = transferId ? await fileTransferStore.getPublicStatus(transferId) : null;
@@ -1236,6 +1344,7 @@ const plugin = {
       mimeType?: string;
       text?: string;
       agentId?: string;
+      transport?: "tcp-v1" | "quic-v7";
     }) => {
       const fileConfig = config.fileTransfer;
       if (!fileConfig?.enabled) return { ok: false as const, error: "fileTransfer is disabled" };
@@ -1254,11 +1363,16 @@ const plugin = {
       if (!validateMimeType(mimeType, config.security.allowedMimeTypes)) {
         return { ok: false as const, error: `MIME type rejected: "${mimeType}" is not in the allowed list` };
       }
+      const transport = params.transport === "quic-v7" ? "quic-v7" : "tcp-v1";
+      if (transport === "quic-v7" && !fileConfig.quic?.enabled) {
+        return { ok: false as const, error: "quic-v7 is not enabled in fileTransfer.quic" };
+      }
       try {
         const hashStarted = performance.now();
         const inspected = await inspectFile(filePath, fileConfig.maxFileSizeBytes);
         const hashMs = performance.now() - hashStarted;
-        const offer: FileOffer = {
+        const attemptId = newAttemptId();
+        const offer = ensureOfferAttempt({
           transferId: newTransferId(),
           ticket: newTransferTicket(),
           sourceDevice: config.tunnel.deviceId,
@@ -1267,7 +1381,7 @@ const plugin = {
           mimeType,
           size: inspected.size,
           sha256: inspected.sha256,
-        };
+        }, transport, attemptId);
         const controlStarted = performance.now();
         const prepared = await tunnelSession.forward(peer.tunnelDeviceId, {
           method: "POST",
@@ -1286,11 +1400,15 @@ const plugin = {
           return { ok: false as const, error: "Receiver prepare returned invalid JSON" };
         }
 
-        let transferred: Awaited<ReturnType<typeof sendFilePayload>> | undefined;
+        let transferred: Awaited<ReturnType<typeof sendFilePayload>> | Awaited<ReturnType<typeof sendQuicPayload>> | undefined;
         let dataCommitted = prepareBody.alreadyCommitted === true;
         if (!dataCommitted) {
           try {
-            transferred = await sendFilePayload(fileConfig, offer, filePath, controlPrepareMs, inspected);
+            if (transport === "quic-v7") {
+              transferred = await sendQuicPayload(fileConfig.quic!, offer, filePath, controlPrepareMs);
+            } else {
+              transferred = await sendFilePayload(fileConfig, offer, filePath, controlPrepareMs, inspected);
+            }
             dataCommitted = true;
           } catch (sendError) {
             const statusResponse = await tunnelSession.forward(peer.tunnelDeviceId, {
@@ -1316,6 +1434,29 @@ const plugin = {
               }, fileConfig.connectTimeoutMs + 10_000).catch(() => undefined);
               throw sendError;
             }
+          }
+        }
+
+        // QUIC helper may finish before the receiver Node process persists DATA_COMMITTED.
+        // Wait briefly so a2a-transfer:// resolution does not race the store write.
+        if (transport === "quic-v7" && dataCommitted) {
+          const deadline = Date.now() + 15_000;
+          while (Date.now() < deadline) {
+            const statusResponse = await tunnelSession.forward(peer.tunnelDeviceId, {
+              method: "POST",
+              path: "/a2a/file-transfer/status",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify({ transferId: offer.transferId }),
+            }, fileConfig.connectTimeoutMs + 5_000).catch(() => null);
+            if (statusResponse?.status === 200) {
+              try {
+                const statusBody = asObject(JSON.parse(statusResponse.body));
+                if (statusBody.state === "DATA_COMMITTED" || statusBody.state === "COMPLETED") break;
+              } catch {
+                // keep waiting
+              }
+            }
+            await new Promise((r) => setTimeout(r, 200));
           }
         }
 
@@ -1363,9 +1504,12 @@ const plugin = {
           mimeType,
           hashMs,
           transferId: offer.transferId,
+          attemptId: offer.attemptId,
+          transport,
           size: offer.size,
           sha256: offer.sha256,
           dataCommitted: true as const,
+          doNotRetry: true as const,
           notificationOk: true as const,
           ...(transferred ? {
             controlPrepareMs: transferred.controlPrepareMs,
@@ -1394,6 +1538,7 @@ const plugin = {
         mimeType: typeof params?.mimeType === "string" ? params.mimeType : undefined,
         text: typeof params?.text === "string" ? params.text : undefined,
         agentId: typeof params?.agentId === "string" ? params.agentId : undefined,
+        transport: params?.transport === "quic-v7" ? "quic-v7" : "tcp-v1",
       }).then((result) => {
         if (result.ok) respond(true, result);
         else respond(false, result, { message: result.error, code: "UNAVAILABLE" });

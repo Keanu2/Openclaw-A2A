@@ -12,5 +12,6 @@
 | [COMPATIBILITY.md](./COMPATIBILITY.md) | A2A 协议兼容性矩阵 |
 | [TCP-FILE-STREAM-CODE-REVIEW-2026-09-02.md](./TCP-FILE-STREAM-CODE-REVIEW-2026-09-02.md) | TCP 字节流文件传输代码审计、优先级与整改门槛 |
 | [TCP-FILE-STREAM-URGENT-FIXES-2026-09-02.md](./TCP-FILE-STREAM-URGENT-FIXES-2026-09-02.md) | 本轮非认证类紧急修复、状态语义、配置与验证记录 |
+| [FILE-TRANSFER-1.5.1-DEVICE-ACCEPTANCE-2026-09-03.md](./FILE-TRANSFER-1.5.1-DEVICE-ACCEPTANCE-2026-09-03.md) | 1.5.1 合同层 + QUIC/TCP 真机双向验收 |
 | [../CHANGELOG.md](../CHANGELOG.md) | 版本变更（上游为主） |
 | [device/](./device/) | 设备 launcher / `pin-tasks-dir.mjs` 辅助脚本 |

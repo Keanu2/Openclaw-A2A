@@ -76,10 +76,21 @@ export function buildAgentCard(config: GatewayConfig): AgentCard {
   };
 
   // Registry auto-bind + far-field peers use metadata.tunnelDeviceId
-  if (tunnelDeviceId) {
-    (card as AgentCard & { metadata?: Record<string, unknown> }).metadata = {
-      tunnelDeviceId,
+  const metadata: Record<string, unknown> = {};
+  if (tunnelDeviceId) metadata.tunnelDeviceId = tunnelDeviceId;
+  if (config.fileTransfer?.enabled) {
+    const transports: string[] = ["inline-base64", "tcp-v1"];
+    if (config.fileTransfer.quic?.enabled) transports.push("quic-v7");
+    metadata.openclawFileTransfer = {
+      version: 1,
+      control: "tunnel",
+      transports,
+      maxStreamBytes: config.fileTransfer.maxFileSizeBytes,
+      maxInlineBytes: config.security?.maxInlineFileSizeBytes ?? 52_428_800,
     };
+  }
+  if (Object.keys(metadata).length > 0) {
+    (card as AgentCard & { metadata?: Record<string, unknown> }).metadata = metadata;
   }
 
   return card;

@@ -2,7 +2,7 @@
   "id": "a2a-gateway",
   "name": "A2A Gateway",
   "description": "OpenClaw A2A v0.3.0 gateway with optional embedded tunnel-client for NAT traversal",
-  "version": "1.5.0",
+  "version": "1.5.1",
   "defaultConfig": {
     "agentCard": {
       "name": "OpenClaw A2A Gateway",
@@ -371,7 +371,7 @@
       "fileTransfer": {
         "type": "object",
         "additionalProperties": false,
-        "description": "Independent TLS/TCP streaming data plane for local A2A files. Control messages still use the A2A tunnel.",
+        "description": "Independent TLS/TCP/QUIC streaming data plane for local A2A files. Control messages still use the A2A tunnel.",
         "properties": {
           "enabled": { "type": "boolean", "default": false },
           "host": { "type": "string", "description": "Public File Relay host or IP" },
@@ -383,7 +383,28 @@
           "maxConcurrentReceives": { "type": "number", "default": 4, "minimum": 1, "description": "Maximum simultaneous inbound stream transfers" },
           "maxInFlightBytes": { "type": "number", "default": 2147483648, "minimum": 0, "description": "Maximum declared bytes reserved by simultaneous inbound transfers" },
           "connectTimeoutMs": { "type": "number", "default": 15000, "minimum": 1000 },
-          "transferTimeoutMs": { "type": "number", "default": 1800000, "minimum": 10000 }
+          "transferTimeoutMs": { "type": "number", "default": 1800000, "minimum": 10000 },
+          "inlinePreferredBelowBytes": { "type": "number", "default": 1048576, "minimum": 0 },
+          "autoPeers": { "type": "array", "items": { "type": "string" }, "description": "Peer names allowed to use stream transports; empty allows all discovered peers" },
+          "order": {
+            "type": "array",
+            "items": { "type": "string", "enum": ["quic-v7", "tcp-v1", "inline-base64"] }
+          },
+          "quic": {
+            "type": "object",
+            "additionalProperties": false,
+            "description": "HarmonyOS RCP raw QUIC v7 helper settings",
+            "properties": {
+              "enabled": { "type": "boolean", "default": false },
+              "binary": { "type": "string", "default": "/data/local/tmp/a2a-rcp/rcp-raw-stream-v7" },
+              "extraEnv": { "type": "object", "additionalProperties": { "type": "string" } },
+              "relayHost": { "type": "string" },
+              "relayPort": { "type": "number", "default": 8008, "minimum": 1, "maximum": 65535 },
+              "connectTimeoutMs": { "type": "number", "default": 15000, "minimum": 1000 },
+              "transferTimeoutMs": { "type": "number", "default": 1800000, "minimum": 10000 },
+              "stallTimeoutMs": { "type": "number", "default": 120000, "minimum": 5000 }
+            }
+          }
         }
       },
       "tunnel": {

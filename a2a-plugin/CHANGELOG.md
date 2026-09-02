@@ -4,6 +4,20 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.5.1] - 2026-09-03
+
+### Added
+
+- Contract-first file data plane: `transferId` + `attemptId`, transport names (`tcp-v1` / `quic-v7` / `inline-base64`), capability selection helpers.
+- `quic-v7` provider via `rcp-raw-stream-v7` child process (HMAC channel derivation, RESULT parsing, status poll before A2A notify).
+- Agent Card `metadata.openclawFileTransfer` when streaming is enabled.
+- `a2a.send_file` accepts optional `transport` (`tcp-v1` default, `quic-v7` when configured).
+
+### Fixed
+
+- QUIC notify race: wait for receiver `DATA_COMMITTED` before sending `a2a-transfer://` FilePart.
+- QUIC receive path avoids clobbering an existing same-name file.
+
 ## [1.5.0] - 2026-08-18
 
 ### Added

@@ -227,14 +227,6 @@ function updateRecord(record: FileTransferRecord, values: Partial<FileTransferRe
   return record;
 }
 
-export function newTransferTicket(): string {
-  return randomBytes(32).toString("base64url");
-}
-
-export function newTransferId(): string {
-  return `a2a-${Date.now()}-${randomBytes(8).toString("hex")}`;
-}
-
 export function startFileReceive(
   config: FileTransferConfig,
   offer: FileOffer,

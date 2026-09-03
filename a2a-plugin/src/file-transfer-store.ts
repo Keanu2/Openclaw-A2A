@@ -185,6 +185,7 @@ export async function commitPartNoClobber(
   desiredName: string,
   partPath: string,
   beforeLink: (candidate: string) => Promise<void>,
+  afterLink?: (candidate: string) => void,
 ): Promise<string> {
   const parsed = path.parse(safeTransferName(desiredName));
   for (let index = 0; index < 10_000; index += 1) {
@@ -195,14 +196,18 @@ export async function commitPartNoClobber(
     await beforeLink(candidate);
     try {
       await fs.promises.link(partPath, candidate);
-      await syncDirectory(receiveDir);
-      await fs.promises.rm(partPath, { force: true });
-      await syncDirectory(receiveDir);
-      return candidate;
+      afterLink?.(candidate);
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === "EEXIST") continue;
       throw error;
     }
+    // Only link(2)'s EEXIST means that the candidate name is occupied. Keep
+    // durability/cleanup outside that catch: retrying after the part was
+    // removed would turn an already-created final file into a false ENOENT.
+    await syncDirectory(receiveDir);
+    await fs.promises.rm(partPath, { force: true });
+    await syncDirectory(receiveDir);
+    return candidate;
   }
   throw new Error("unable to allocate receive filename");
 }

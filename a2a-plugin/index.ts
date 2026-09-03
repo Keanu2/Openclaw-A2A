@@ -747,13 +747,14 @@ const plugin = {
       completed: Promise<{ transferId: string; size: number; path: string }>;
     };
     const activeFileReceives = new Map<string, ActiveReceive>();
-    if (fileTransferStore) {
-      void fileTransferStore.recoverInterrupted().then((count) => {
+    const fileTransferRecovery = fileTransferStore
+      ? fileTransferStore.recoverInterrupted().then((count) => {
         if (count > 0) api.logger.warn(`a2a-file-transfer: recovered ${count} interrupted transfer record(s)`);
       }).catch((error: unknown) => {
         api.logger.warn(`a2a-file-transfer: state recovery failed: ${error instanceof Error ? error.message : String(error)}`);
-      });
-    }
+        throw error;
+      })
+      : Promise.resolve();
     app.post("/a2a/file-transfer/prepare", fileControlJsonParser, async (req, res) => {
       try {
         const fileConfig = config.fileTransfer;
@@ -761,6 +762,9 @@ const plugin = {
           res.status(503).json({ ok: false, error: "fileTransfer is disabled" });
           return;
         }
+        // Recovery may delete an interrupted .part. Never admit a new receive
+        // until that one-time scan has completed.
+        await fileTransferRecovery;
         const offer = asObject(req.body) as unknown as FileOffer;
         validateFileOffer(offer, fileConfig.maxFileSizeBytes);
         if (config.tunnel?.deviceId && offer.targetDevice !== config.tunnel.deviceId) {
@@ -2195,9 +2199,9 @@ const plugin = {
 
         // Stop accepting useful progress from active file receivers and give
         // their shared cleanup path a bounded chance to remove partial files.
-        const activeReceiveCompletions = [...activeFileReceives.values()].map(({ receive }) => {
-          receive.cancel("gateway shutting down");
-          return receive.completed;
+        const activeReceiveCompletions = [...activeFileReceives.values()].map((active) => {
+          active.cancel("gateway shutting down");
+          return active.completed;
         });
         if (activeReceiveCompletions.length > 0) {
           await Promise.race([

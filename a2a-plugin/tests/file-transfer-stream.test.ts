@@ -79,6 +79,32 @@ describe("TLS/TCP file transfer primitives", () => {
     }
   });
 
+  it("keeps the part file through multiple filename collisions", async () => {
+    const dir = await fs.promises.mkdtemp(path.join(os.tmpdir(), "a2a-tcp-collisions-"));
+    const part = path.join(dir, ".transfer.part");
+    await fs.promises.writeFile(path.join(dir, "report.txt"), "first");
+    await fs.promises.writeFile(path.join(dir, "report (1).txt"), "second");
+    await fs.promises.writeFile(path.join(dir, "report (2).txt"), "third");
+    await fs.promises.writeFile(part, "new-file");
+    const attempted: string[] = [];
+    let linkedCandidate = "";
+    try {
+      const committed = await commitPartNoClobber(dir, "report.txt", part, async (candidate) => {
+        attempted.push(path.basename(candidate));
+        assert.equal(await fs.promises.readFile(part, "utf8"), "new-file");
+      }, (candidate) => {
+        linkedCandidate = path.basename(candidate);
+      });
+      assert.equal(path.basename(committed), "report (3).txt");
+      assert.equal(linkedCandidate, "report (3).txt");
+      assert.deepEqual(attempted, ["report.txt", "report (1).txt", "report (2).txt", "report (3).txt"]);
+      assert.equal(await fs.promises.readFile(committed, "utf8"), "new-file");
+      await assert.rejects(() => fs.promises.stat(part), /ENOENT/);
+    } finally {
+      await fs.promises.rm(dir, { recursive: true, force: true });
+    }
+  });
+
   it("recovers interrupted state and resolves only durably committed transfer URIs", async () => {
     const dir = await fs.promises.mkdtemp(path.join(os.tmpdir(), "a2a-tcp-state-"));
     const store = new FileTransferStore({ receiveDir: dir });

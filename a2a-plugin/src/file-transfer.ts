@@ -246,6 +246,7 @@ export function startFileReceive(
     let partPath: string | undefined;
     let record: FileTransferRecord | undefined;
     let committed = false;
+    let commitMayExist = false;
     let removeTransferAbortListener: (() => void) | undefined;
     try {
       validateFileOffer(offer, config.maxFileSizeBytes);
@@ -329,6 +330,13 @@ export function startFileReceive(
         async (candidate) => {
           await options.store?.save(updateRecord(record!, { state: "COMMITTING", path: candidate }));
         },
+        () => {
+          // link(2) has created the no-clobber final name. If a subsequent
+          // directory sync/removal fails, the outcome is ambiguous rather
+          // than a confirmed failure and must never trigger an automatic
+          // duplicate transfer.
+          commitMayExist = true;
+        },
       );
       partPath = undefined;
       const result: ReceiveResult = {
@@ -363,18 +371,27 @@ export function startFileReceive(
       const failure = error instanceof Error ? error : new Error(String(error));
       readyReject(failure);
       if (!committed && record) {
-        await options.store?.save(updateRecord(record, {
-          state: failure.name === "AbortError" ? "CANCELED" : "FAILED_CONFIRMED",
-          partPath: undefined,
-          path: undefined,
-          error: failure.message,
-        })).catch(() => undefined);
+        if (commitMayExist) {
+          await options.store?.save(updateRecord(record, {
+            state: "COMMITTING",
+            error: `commit outcome requires recovery: ${failure.message}`,
+          })).catch(() => undefined);
+        } else {
+          await options.store?.save(updateRecord(record, {
+            state: failure.name === "AbortError" ? "CANCELED" : "FAILED_CONFIRMED",
+            partPath: undefined,
+            path: undefined,
+            error: failure.message,
+          })).catch(() => undefined);
+        }
       }
       if (socket && !socket.destroyed) {
         await writeLine(socket, { ok: false, transferId: offer.transferId, error: failure.message }).catch(() => undefined);
       }
       socket?.destroy();
-      if (!committed && partPath) await fs.promises.rm(partPath, { force: true }).catch(() => undefined);
+      if (!committed && !commitMayExist && partPath) {
+        await fs.promises.rm(partPath, { force: true }).catch(() => undefined);
+      }
       throw failure;
     }
   })();

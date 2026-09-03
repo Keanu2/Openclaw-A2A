@@ -76,7 +76,10 @@ function spawnHelper(
   return spawn(quic.binary, args, {
     shell: false,
     env: mergeEnv(quic.extraEnv),
-    stdio: ["ignore", "pipe", "pipe"],
+    // Keep all three streams materialized so the helper process has one stable
+    // type across supported Node versions. The protocol itself does not write
+    // to stdin.
+    stdio: ["pipe", "pipe", "pipe"],
   });
 }
 

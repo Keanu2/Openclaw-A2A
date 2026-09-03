@@ -75,8 +75,17 @@ Relay 新增 `HEADER_BYTES`、`HEADER_MS`、`PAIRING_MS`、`STALL_MS`、
 | `git diff --check` | 通过（仅有仓库既有 LF/CRLF 提示） |
 | 插件 `npm test` | 未运行到测试：当前 Windows 主机 Node 24 的 `os.userInfo()` 返回 `uv_os_get_passwd ENOMEM`，tsx 启动前失败；不是断言失败 |
 
-尚未在本机完成真实 TLS relay、双设备公网、磁盘满、ACK 人工丢包、1 GiB 和多并发
-长稳测试。因此本轮结论是“紧急代码缺陷已收敛并有基础回归”，不是“已完成生产验收”。
+2026-09-03 补充：预加载只替代 `os.userInfo()` 的测试 shim 后，
+`tests/file-transfer-stream.test.ts` 已实际执行并 **6/6 通过**，包括新增的连续多重同名碰撞回归。
+全量 `npm test` 仍未在该宿主环境重跑。
+
+2026-09-03 已补充真实 TLS relay 双设备公网测试：双向 10 MiB/100 MiB、每组五次，
+共 20/20 成功，且逐次核对 receiver 持久终态和实际落盘 SHA-256。详情见
+`TCP-FILE-STREAM-REAL-DEVICE-TEST-2026-09-03.md`。
+
+测试中另发现并修复：no-clobber 提交把后处理 `EEXIST` 误当文件名碰撞、启动恢复与
+新接收缺少屏障、stop 路径引用错误，以及 QUIC helper 的 Node 子进程类型不兼容。
+磁盘满、ACK 人工丢包、1 GiB、弱网和多并发长稳仍未完成，因此仍不是完整生产验收。
 
 ## 6. 明确保留的问题
 

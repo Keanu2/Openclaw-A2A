@@ -1,5 +1,5 @@
 /**
- * Tunnel protocol types — kept compatible with a2a-relay-2/tunnel-client + relay-server.py
+ * Tunnel protocol types — kept compatible with openclaw-a2a-relay/tunnel-client + relay-server.py
  */
 
 export const MessageType = {

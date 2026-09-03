@@ -50,6 +50,19 @@ When `registry.enabled` is true on this device:
 - User says「查注册设备 / 谁已注册」→ use tool `a2a_registry_list` (shows serviceId, tunnelDeviceId, AgentCard; includes self)
 - Paste the tool's first result block (【注册中心…】) to the user **verbatim** — do not rewrite the format
 - To message a listed peer: use that **serviceId** as the A2A peer name (`a2a.send` / send scripts)
+
+### Send a **local** file to a peer (base64 + WS tunnel)
+
+When the user asks to send a file from Desktop/Photo/gallery on **this device**:
+
+- **Must** use tool `a2a_send_local_file` with `peer` + absolute local `path`
+- Do **not** pass `name` (wire filename = basename of `path`)
+- Transport: read file → base64 FilePart → **WebSocket tunnel** to peer (not h3/TCP/artifact URI upload)
+- Do **not** use `a2a_send_file` for local paths; do **not** paste base64 in chat
+
+`a2a_send_file` is only for files already at a public **http(s) URL** on the internet.
+
+HarmonyOS templates: see `docs/device/workspace-snapshots/TOOLS-HW-PC1.md` and `TOOLS-HW-Phone1.md`.
 ```
 
 ---

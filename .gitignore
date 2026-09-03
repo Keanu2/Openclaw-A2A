@@ -15,3 +15,7 @@
 **/.agents/
 **/.pi/
 *.log
+
+.tmp-*
+*.bin
+*.tgz

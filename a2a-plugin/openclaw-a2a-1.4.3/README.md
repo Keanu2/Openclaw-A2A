@@ -4,5 +4,5 @@
 
 鸿蒙即装即用请使用：
 
-- `D:\openclaw\openclaw-2026.3.13\openclaw-2026.3.13.tgz`
-- 说明：`D:\openclaw\openclaw-2026.3.13\README.md`
+- `D:\openclaw\openclaw-2026.3.13-a2a-1.4.3-release\openclaw-2026.3.13-a2a-1.4.3.tgz`
+- 说明：`D:\openclaw\openclaw-2026.3.13-a2a-1.4.3-release\README.md`

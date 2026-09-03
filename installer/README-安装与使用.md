@@ -1,6 +1,6 @@
 # 定制版 OpenClaw 安装说明
 
-内置 **A2A**（消息/文件 + 隧道 + 注册中心）。安装包：本目录 `openclaw-2026.3.13.tgz`（约 29MB）。  
+内置 **A2A**（消息/文件 + 隧道 + 注册中心）。安装包：本目录 `openclaw-2026.3.13-a2a-1.4.3.tgz`（约 29MB）。  
 命令用 `sh`/`bash`，不要用 PowerShell。
 
 ## 你要做什么（装包不会自动配好）
@@ -41,10 +41,10 @@ macOS / Termux 一般用默认 `~/.openclaw/`，可不设上面几项；只需�
 
 ```bash
 # 推到设备（开发机）
-hdc file send openclaw-2026.3.13.tgz /data/local/tmp/openclaw-2026.3.13.tgz
+hdc file send openclaw-2026.3.13-a2a-1.4.3.tgz /data/local/tmp/openclaw-2026.3.13-a2a-1.4.3.tgz
 
 # 设备上（先做第 1 节）
-npm install -g --omit=dev /data/local/tmp/openclaw-2026.3.13.tgz
+npm install -g --omit=dev /data/local/tmp/openclaw-2026.3.13-a2a-1.4.3.tgz
 openclaw plugins list    # 应看到 A2A Gateway = loaded
 ```
 
@@ -56,10 +56,13 @@ openclaw config set plugins.load.paths '[]'
 
 ---
 
-## 3. 写 openclaw.json（含注册中心）
+## 3. 写 openclaw.json（含注册中心 + WS 隧道）
 
 路径：`/data/local/.openclaw/openclaw.json`  
 **注册中心不会默认配置**，必须写在这里。
+
+**本地文件发送**：走 `a2a_send_local_file`（base64 内联，经 WS 隧道），**不要**用 h3/artifact TCP 直传或 `a2a_send_file` 发本地路径。  
+**不要**为 TCP 直传实验添加 `security.fileUriAllowlist`（除非确有公网 URI 需求）。
 
 现网地址（可改成你的）：
 
@@ -143,14 +146,22 @@ openclaw config set plugins.load.paths '[]'
 
 ## 4. 配 workspace
 
-装包**不含**设备专属 workspace。出于安全考虑，带设备名称、路径和 Agent
-记忆的本地 `harmony-workspace/` 不上传 GitHub。请分别为电脑和手机创建 workspace，
-再拷到设备 `/data/local/.openclaw/workspace/`。主要配置：
+装包**不含**设备专属 workspace。请分别为电脑和手机创建 workspace，
+再拷到设备 `/data/local/.openclaw/workspace/`。
 
-- `MEMORY.md`：本机名、对端名、路径  
-- `TOOLS.md`：怎么发消息/文件  
+| 文件 | 说明 |
+|------|------|
+| `MEMORY.md` | 本机名、对端名、路径 |
+| `TOOLS.md` | 发消息/发文件规则（**必读**） |
 
-手机和电脑不要互相覆盖。
+**TOOLS.md 模板（回退 base64 版，含 tunnel，禁 TCP 直传）：**
+
+- 电脑：[`a2a-plugin/docs/device/workspace-snapshots/TOOLS-HW-PC1.md`](../a2a-plugin/docs/device/workspace-snapshots/TOOLS-HW-PC1.md)
+- 手机：[`a2a-plugin/docs/device/workspace-snapshots/TOOLS-HW-Phone1.md`](../a2a-plugin/docs/device/workspace-snapshots/TOOLS-HW-Phone1.md)
+
+拷贝到设备后覆盖 `workspace/TOOLS.md`（或合并「发本地文件」章节）。手机和电脑不要互相覆盖。
+
+若曾试验 h3/artifact 直传，请删除 TOOLS 里「先上传再发 URI」的说明。
 
 ---
 
@@ -173,7 +184,16 @@ openclaw gateway call a2a.send --token "$GATEWAY_TOKEN" --timeout 300000 \
   --params '{"peer":"HW-Phone1","message":{"text":"你好"}}'
 ```
 
-`list` 能看到两端；发文件用 `a2a.send_local_file` / 工具 `a2a_send_local_file`，`path` 用绝对路径。
+`list` 能看到两端；发文件：
+
+```bash
+openclaw gateway call a2a.send_local_file --timeout 300000 \
+  --params '{"peer":"HW-Phone1","path":"/绝对路径/文件.jpg"}'
+```
+
+或 Agent 工具 `a2a_send_local_file`（**必须**用于本机路径；**禁止** `a2a_send_file` 发本地文件）。
+
+**服务器**若曾开 h3/artifact 直传，按 [`agent-registry-relay/deploy/ROLLBACK-NO-TCP-FILE.md`](https://github.com/Keanu2/agent-registry-relay/blob/main/deploy/ROLLBACK-NO-TCP-FILE.md) 关回 WS tunnel + HTTP relay。
 
 ---
 
@@ -187,3 +207,5 @@ openclaw gateway call a2a.send --token "$GATEWAY_TOKEN" --timeout 300000 \
 | 出现 `.openclaw/.openclaw` | `HOME` 设错了；改回 `/data/local`，可删内层 |
 | Agent 乱说 SoftBus / 路径错 | workspace 没配或配错设备 |
 | 对端 not found | 对端没上线，或 peer 名不是对方的 `serviceId` |
+| Agent 用 `a2a_send_file` 发本地图 | 用模板 TOOLS-HW-*.md，强制 `a2a_send_local_file` |
+| 曾开 h3/artifact 直传 | 见 agent-registry-relay `deploy/ROLLBACK-NO-TCP-FILE.md` |

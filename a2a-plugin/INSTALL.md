@@ -2,7 +2,7 @@
 
 | 包 | 用途 |
 |----|------|
-| **`openclaw-2026.3.13.tgz`**（~29MB） | 设备上装这个 |
+| **`openclaw-2026.3.13-a2a-1.4.3.tgz`**（~29MB） | 设备上装这个 |
 | `openclaw-a2a-*.tgz`（~115KB） | 仅插件，不是主安装包 |
 
 完整步骤见：
@@ -13,7 +13,7 @@
 ## 鸿蒙最快路径
 
 ```bash
-hdc file send openclaw-2026.3.13.tgz /data/local/tmp/openclaw-2026.3.13.tgz
+hdc file send openclaw-2026.3.13-a2a-1.4.3.tgz /data/local/tmp/openclaw-2026.3.13-a2a-1.4.3.tgz
 ```
 
 设备上：
@@ -25,7 +25,7 @@ export OPENCLAW_HOME=/data/local
 export OPENCLAW_STATE_DIR=/data/local/.openclaw
 export OPENCLAW_CONFIG_PATH=/data/local/.openclaw/openclaw.json
 
-npm install -g --omit=dev /data/local/tmp/openclaw-2026.3.13.tgz
+npm install -g --omit=dev /data/local/tmp/openclaw-2026.3.13-a2a-1.4.3.tgz
 ```
 
 然后按完整说明写配置、拷 workspace、启动。`HOME` 不要设成 `/data/local/.openclaw`。

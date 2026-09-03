@@ -1,5 +1,5 @@
 /**
- * Embedded tunnel session — logic aligned with a2a-relay-2/tunnel-client/client.js
+ * Embedded tunnel session — logic aligned with openclaw-a2a-relay/tunnel-client/client.js
  *
  * Differences vs standalone CLI (intentional, for in-process use):
  * - No local HTTP proxy port (--local-port); outbound uses forward() directly

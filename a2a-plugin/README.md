@@ -17,10 +17,10 @@ OpenClaw 的 **A2A Gateway** 插件（嵌入 Tunnel 版）：让两台设备上�
 
 ## 快速开始
 
-设备装定制包 `openclaw-2026.3.13.tgz`（约 29MB），不要只装本仓库的小插件包。
+设备装定制包 `openclaw-2026.3.13-a2a-1.4.3.tgz`（约 29MB），不要只装本仓库的小插件包。
 
 ```bash
-npm install -g --omit=dev /data/local/tmp/openclaw-2026.3.13.tgz
+npm install -g --omit=dev /data/local/tmp/openclaw-2026.3.13-a2a-1.4.3.tgz
 ```
 
 装完还需：环境变量 → `openclaw.json`（隧道+注册中心）→ workspace → 启动。  

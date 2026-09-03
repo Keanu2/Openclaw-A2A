@@ -26,7 +26,7 @@ import { createTunnelSession } from "../src/tunnel/session.js";
 import { createTunnelFetch } from "../src/tunnel/tunnel-fetch.js";
 
 // ---------------------------------------------------------------------------
-// Mini relay — 行为对齐 a2a-relay-2/relay-server.py 的核心路径
+// Mini relay — 行为对齐 openclaw-a2a-relay/relay-server.py 的核心路径
 // ---------------------------------------------------------------------------
 
 type DeviceMap = Map<string, WebSocket>;

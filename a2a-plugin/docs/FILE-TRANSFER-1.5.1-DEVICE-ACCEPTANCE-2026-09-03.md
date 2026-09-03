@@ -1,7 +1,7 @@
 # 文件数据面 1.5.1 真机验收记录
 
 - 日期：2026-09-03（Asia/Shanghai）
-- 客户端：`openclaw-a2a@1.5.1`（`Openclaw-A2A-tcp-file-stream`）
+- 客户端：`openclaw-a2a@1.5.1`（`Openclaw-A2A-file-transfer`；原名 `Openclaw-A2A-tcp-file-stream`）
 - 设备：电脑 `53V0224C19002918`（tunnel `HW-Phone2`）、手机 `FMR0223926019410`（tunnel `HW-Phone1`）
 - 控制面：A2A WebSocket tunnel → `ws://121.37.53.35:8001`
 - TCP 数据面：TLS File Relay → `121.37.53.35:8001`（SNI `a2a-file.invalid`）

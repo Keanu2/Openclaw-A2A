@@ -34,6 +34,11 @@ export interface PeerConfig {
    * is forwarded via the embedded tunnel-client (relay device_id).
    */
   tunnelDeviceId?: string;
+  /**
+   * Cached Agent Card (e.g. from registry). Used for openclawFileTransfer
+   * capability selection; missing card → treat peer as legacy inline-only.
+   */
+  agentCard?: Record<string, unknown>;
 }
 
 // ---------------------------------------------------------------------------

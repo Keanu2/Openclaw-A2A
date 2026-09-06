@@ -15,7 +15,11 @@ import {
   decodedBase64Size,
   sanitizeUriForLog,
 } from "./file-security.js";
-import { resolveCommittedTransferUriSync, type FileTransferConfig } from "./file-transfer.js";
+import {
+  resolveCommittedTransferUri,
+  resolveCommittedTransferUriSync,
+  type FileTransferConfig,
+} from "./file-transfer.js";
 
 const DEFAULT_AGENT_RESPONSE_TIMEOUT_MS = 300_000;
 const GATEWAY_CONNECT_TIMEOUT_MS = 10_000;
@@ -316,6 +320,7 @@ function formatFilePartAsText(obj: Record<string, unknown>): string {
   const uri = asString(file.uri);
   if (uri) {
     if (uri.startsWith("a2a-transfer:")) {
+      // Sync path: execute() should already have waited; keep a last sync lookup.
       const resolved = fileTransferReceiveConfig
         ? resolveCommittedTransferUriSync(fileTransferReceiveConfig, uri, name, mimeType)
         : null;
@@ -1269,6 +1274,10 @@ export class OpenClawAgentExecutor implements AgentExecutor {
     };
     eventBus.publish(workingTask);
 
+    // Stream transfers may notify slightly before DATA_COMMITTED is persisted.
+    // Wait briefly so a2a-transfer:// can resolve instead of failing the whole task.
+    await this.waitForInboundTransferUris(requestContext.userMessage);
+
     // Validate inbound FileParts before dispatching to the agent
     const fileValidationError = this.validateInboundFileParts(requestContext.userMessage);
     if (fileValidationError) {
@@ -1510,6 +1519,27 @@ export class OpenClawAgentExecutor implements AgentExecutor {
       gatewayPassword: asString(gatewayAuth.password) || "",
       hooksToken: asString(hooks.token) || "",
     };
+  }
+
+  private async waitForInboundTransferUris(userMessage: unknown): Promise<void> {
+    if (!fileTransferReceiveConfig) return;
+    const parts = this.extractFileParts(userMessage);
+    for (const part of parts) {
+      const file = asObject(part.file);
+      if (!file) continue;
+      const uri = asString(file.uri);
+      if (!uri?.startsWith("a2a-transfer:")) continue;
+      const name = asString(file.name);
+      const mimeType = asString(file.mimeType);
+      await resolveCommittedTransferUri(
+        fileTransferReceiveConfig,
+        uri,
+        name,
+        mimeType,
+        90_000,
+        200,
+      );
+    }
   }
 
   /**

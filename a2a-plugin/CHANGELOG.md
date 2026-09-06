@@ -4,6 +4,33 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.6.1] - 2026-09-04
+
+### Fixed
+
+- Do not send `a2a-transfer://` until the receiver store reports `DATA_COMMITTED` / `COMPLETED` (no notify after wait timeout).
+- `/a2a/file-transfer/status` returns `RECEIVING` while an active receive is in flight (avoids false 404 during QUIC).
+- Inbound executor waits up to 90s for `a2a-transfer://` resolution before failing the task.
+
+### Changed
+
+- Device configure script default `receiveDir` examples use OpenClaw state dir (`…/.openclaw/a2a-files`) and keep QUIC `LD_LIBRARY_PATH`.
+
+## [1.6.0] - 2026-09-03
+
+### Added
+
+- Unified local-file send: `fileTransfer.mode` (`auto` | `quic` | `tcp` | `base64`) plus peer Agent Card intersection.
+- `auto` selects quic→tcp→base64 before the first payload byte; pre-start prepare failures may try the next candidate only.
+- Agent Card advertises `quic-v7` only when the helper binary exists on disk.
+- Registry peers carry cached `agentCard` for capability selection; tunnel GET card is a fallback.
+
+### Changed
+
+- `a2a.send_file` / `a2a_send_file` and `a2a.send_local_file` / `a2a_send_local_file` share one send path (local `path`).
+- `quic.relayHost` defaults to `fileTransfer.host`.
+- Deprecated as user knobs: `quic.enabled`, `order`, `autoPeers` (still parsed for compatibility).
+
 ## [1.5.1] - 2026-09-03
 
 ### Added

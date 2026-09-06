@@ -45,6 +45,7 @@ describe("TLS/TCP file transfer primitives", () => {
     const config = parseConfig({
       fileTransfer: {
         enabled: true,
+        mode: "auto",
         host: "121.37.53.35",
         port: 8001,
         serverName: "a2a-file.invalid",
@@ -53,14 +54,20 @@ describe("TLS/TCP file transfer primitives", () => {
         maxFileSizeBytes: 123456,
         maxConcurrentReceives: 3,
         maxInFlightBytes: 654321,
+        quic: {
+          binary: "/data/local/tmp/a2a-rcp/rcp-raw-stream-v7",
+        },
       },
     });
     assert.equal(config.fileTransfer?.enabled, true);
+    assert.equal(config.fileTransfer?.mode, "auto");
     assert.equal(config.fileTransfer?.host, "121.37.53.35");
     assert.equal(config.fileTransfer?.port, 8001);
     assert.equal(config.fileTransfer?.maxFileSizeBytes, 123456);
     assert.equal(config.fileTransfer?.maxConcurrentReceives, 3);
     assert.equal(config.fileTransfer?.maxInFlightBytes, 654321);
+    assert.equal(config.fileTransfer?.quic?.relayHost, "121.37.53.35");
+    assert.equal(config.fileTransfer?.quic?.relayPort, 8008);
   });
 
   it("commits without overwriting an existing same-name file", async () => {

@@ -3,6 +3,9 @@ import path from "node:path";
 
 export type TransportName = "inline-base64" | "quic-v7" | "tcp-v1";
 
+/** User-facing send policy. Auto picks from Agent Card intersection before first payload byte. */
+export type FileTransferMode = "auto" | "quic" | "tcp" | "base64";
+
 export type ErrorCategory =
   | "UNSUPPORTED"
   | "UNAVAILABLE_BEFORE_START"
@@ -26,6 +29,8 @@ export interface QuicTransferConfig {
 
 export interface FileTransferConfig {
   enabled: boolean;
+  /** Send policy: auto | quic | tcp | base64. Default auto. */
+  mode: FileTransferMode;
   host: string;
   port: number;
   serverName: string;
@@ -36,9 +41,10 @@ export interface FileTransferConfig {
   maxInFlightBytes: number;
   connectTimeoutMs: number;
   transferTimeoutMs: number;
-  /** Preferred stream order; tcp-v1 is ignored for auto-select until explicitly enabled. */
+  /** @deprecated Prefer mode=auto; ignored when mode is set. Kept for old configs. */
   order?: TransportName[];
   inlinePreferredBelowBytes?: number;
+  /** @deprecated Card intersection replaces peer allowlists. */
   autoPeers?: string[];
   quic?: QuicTransferConfig;
 }

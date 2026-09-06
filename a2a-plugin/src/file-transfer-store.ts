@@ -267,3 +267,21 @@ export function resolveCommittedTransferUriSync(
     return null;
   }
 }
+
+/** Wait for receiver store to reach DATA_COMMITTED before treating a2a-transfer:// as valid. */
+export async function resolveCommittedTransferUri(
+  config: Pick<FileTransferConfig, "receiveDir">,
+  uri: string,
+  expectedName?: string,
+  expectedMimeType?: string,
+  timeoutMs = 60_000,
+  pollMs = 200,
+): Promise<ResolvedTransfer | null> {
+  const deadline = Date.now() + Math.max(0, timeoutMs);
+  for (;;) {
+    const resolved = resolveCommittedTransferUriSync(config, uri, expectedName, expectedMimeType);
+    if (resolved) return resolved;
+    if (Date.now() >= deadline) return null;
+    await new Promise((r) => setTimeout(r, pollMs));
+  }
+}

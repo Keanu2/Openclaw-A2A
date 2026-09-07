@@ -20,7 +20,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
-- Device configure script default `receiveDir` examples use OpenClaw state dir (`…/.openclaw/a2a-files`) and keep QUIC `LD_LIBRARY_PATH`.
+- Device configure script default `receiveDir` examples use OpenClaw state dir (`…/.openclaw/a2a-files`) and keep QUIC `LD_LIBRARY_PATH`. Production devices that need file-manager visibility should set `receiveDir` to `…/Docs/OPENCLAW` (TCP commit on that FS requires **1.6.2**).
 
 ## [1.6.0] - 2026-09-03
 

@@ -20,7 +20,7 @@
 | 审计项 | 状态 | 实现结果 |
 |---|---|---|
 | TCP-001 | 已修复 | 连接建立即安装 error/close 处理；注册头有独立大小/时间限制，错误返回结构化响应，畸形输入不再打崩进程。 |
-| TCP-004 | 已修复 | 使用同目录 hard-link 的原子 no-clobber 提交，冲突自动选择新名称；恢复流程不会删除未经所有权确认的候选文件。 |
+| TCP-004 | 已修复 | 使用同目录 hard-link 的原子 no-clobber 提交，冲突自动选择新名称；恢复流程不会删除未经所有权确认的候选文件。（**1.6.2**：见文末补记，鸿蒙 `Docs/OPENCLAW` 上 `link(2)` 失败时回退 rename/copy） |
 | TCP-005 | 已修复 | 提交后发送稳定 messageId 的 `a2a-transfer://<transferId>` FilePart；receiver 仅从本机持久状态解析成真实路径。 |
 | TCP-006 | 已修复 | 0 B 在配对后直接进入 `WAIT_ACK`。 |
 | TCP-007 | 已修复 | receiver 全生命周期纳入统一 try/catch；relay 增加 `registered` 确认，确认后才返回 prepare ready。 |
@@ -98,3 +98,12 @@ Relay 新增 `HEADER_BYTES`、`HEADER_MS`、`PAIRING_MS`、`STALL_MS`、
 
 在上述认证与兼容能力完成前，不应开放到不可信公网，也不应启用自动
 `TCP -> inline-base64` fallback；尤其不能在结果不明确时切换传输方式。
+
+## 7. 补记（1.6.2，2026-09-07）
+
+HarmonyOS 用户可见目录 `Docs/OPENCLAW`（hmdfs/sharefs）上同目录 `link(2)` 常返回
+`EPERM`，导致强制 `tcp-v1` 无法提交。`commitPartNoClobber` 在保留 no-clobber 与
+目录 fsync 的前提下，对 `EPERM`/`ENOTSUP`/`EXDEV`/`EACCES` 回退为 `rename`，再不行
+则 `copyFile` + 删除 `.part`。成功定义仍是 size+SHA 校验后进入 `DATA_COMMITTED`。
+
+验收见 [FILE-TRANSFER-1.6.2-DEVICE-ACCEPTANCE-2026-09-07.md](./FILE-TRANSFER-1.6.2-DEVICE-ACCEPTANCE-2026-09-07.md)。

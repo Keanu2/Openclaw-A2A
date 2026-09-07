@@ -77,3 +77,8 @@
 ## 6. 回滚
 
 恢复 `openclaw.json` 备份，重装上一版扩展包，重启 gateway。
+
+## 7. 后续补丁
+
+- **1.6.1**：notify 竞态 — [FILE-TRANSFER-1.6.1-DEVICE-ACCEPTANCE-2026-09-04.md](./FILE-TRANSFER-1.6.1-DEVICE-ACCEPTANCE-2026-09-04.md)
+- **1.6.2**：Docs/OPENCLAW hard-link — [FILE-TRANSFER-1.6.2-DEVICE-ACCEPTANCE-2026-09-07.md](./FILE-TRANSFER-1.6.2-DEVICE-ACCEPTANCE-2026-09-07.md)

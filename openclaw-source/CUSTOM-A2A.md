@@ -4,7 +4,7 @@
 
 | 项 | 说明 |
 |----|------|
-| 插件 | `extensions/a2a-gateway/`（对齐 Openclaw-A2A **1.4.3**） |
+| 插件 | `extensions/a2a-gateway/`（对齐 Openclaw-A2A **1.6.2**；完整 tgz 内置副本可能仍为 1.4.3，需覆盖） |
 | 安装包 | `openclaw-2026.3.13.tgz` |
 | workspace 模板 | 本地 `harmony-workspace/pc/`、`phone/`（含设备配置，不上传 GitHub） |
 | 安装说明 | [README-安装与使用.md](./README-安装与使用.md) |

@@ -196,7 +196,11 @@ state:  <tempDir>/.a2a-transfer-state/<transferId>.json
 
 TCP 快照的 `receiveDir` **配置别名到 `fileStorage.tempDir`**，不再引入第二个用户可见目录。提交语义对齐现有 `uniquePathForName`（`a.jpg` → `a (1).jpg`），吸收 TCP 快照的 Windows 保留名 / 尾随点空格规则。
 
+提交原语：优先同目录 `link(2)`（原子占名、同 inode）。**1.6.2**：若目标 FS 拒绝 hard link（鸿蒙 `Docs/OPENCLAW` 上常见 `EPERM`），回退 `rename(.part→最终名)`，再失败则 `copyFile` + 删 `.part`，并继续 no-clobber 换名；成功后仍 fsync 父目录。不改变 `DATA_COMMITTED` 含义。
+
 store 用原子 JSON + 同目录 lock 文件，不依赖 `flock`。终态 TTL 可配。启动把遗留 active 标为 `INTERRUPTED` 再核对 `.part` / 最终文件 / helper，未知状态不得当失败重传。
+
+通知合同（**1.6.1**）：发端须在收端记录已达 `DATA_COMMITTED`/`COMPLETED` 后再发送 `a2a-transfer://` FilePart；活动接收期间 status 可返回 `RECEIVING`。
 
 ## 4. 兼容与选择（发布策略，可配，不是合同）
 

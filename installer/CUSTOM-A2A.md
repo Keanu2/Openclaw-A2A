@@ -1,6 +1,7 @@
 # 定制版 OpenClaw（内置 A2A）
 
-基于 **v2026.3.13**，内置 `a2a-gateway`（隧道 + 注册中心，对齐插件 **1.4.3**）。
+基于 **v2026.3.13**，内置 `a2a-gateway`（隧道 + 注册中心，安装包基线 **1.4.3**）。  
+需要 Unified 文件传输（`fileTransfer.mode` / tcp-v1 / quic-v7）时，用仓库 `a2a-plugin` 当前版 **1.6.2** 覆盖 `extensions/a2a-gateway` 后重启。
 
 | 项 | 说明 |
 |----|------|

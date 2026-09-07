@@ -1,6 +1,6 @@
 # openclaw-2026.3.13
 
-定制 OpenClaw（内置 A2A **1.4.3**）。
+定制 OpenClaw（内置 A2A 基线 **1.4.3**；文件数据面请用 `a2a-plugin` **1.6.2** 覆盖部署，见 `a2a-plugin/CHANGELOG.md`）。
 
 | 文件 | 说明 |
 |------|------|

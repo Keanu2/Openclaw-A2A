@@ -1,11 +1,20 @@
 # A2A 文件传输统一方案（客户端 + 服务器）
 
-- 日期：2026-09-03
-- 状态：**已实施（插件 1.6.0）**；边车侧仍只需核对 registry metadata / QUIC systemd
+- 日期：2026-09-03（后续补丁见下）
+- 状态：**已实施（插件 1.6.0）**；补丁 **1.6.1**（notify 竞态）、**1.6.2**（Docs/OPENCLAW hard-link 回退）；边车侧仍只需核对 registry metadata / QUIC systemd
+- 当前插件版本：`openclaw-a2a@1.6.2`
 - 代码仓：`Keanu2/Openclaw-A2A-file-transfer`
 - QUIC helper/中继仓：`Keanu2/a2a-raw-quic-stream`
 - 边车示例：`121.37.53.35`
 - 线协议兼容现网 1.5.x：prepare 路径、`tcp-v1` / `quic-v7` / `inline-base64`、`a2a-transfer://` 不改
+
+### 落地后补丁
+
+| 版本 | 变更 | 验收 |
+|------|------|------|
+| 1.6.0 | Unified `mode` + Card 选路；`send_file` / `send_local_file` 同一路径 | [FILE-TRANSFER-1.6.0-DEVICE-ACCEPTANCE-2026-09-03.md](./FILE-TRANSFER-1.6.0-DEVICE-ACCEPTANCE-2026-09-03.md) |
+| 1.6.1 | 收端 `DATA_COMMITTED` 后再发 `a2a-transfer://`；status `RECEIVING` | [FILE-TRANSFER-1.6.1-DEVICE-ACCEPTANCE-2026-09-04.md](./FILE-TRANSFER-1.6.1-DEVICE-ACCEPTANCE-2026-09-04.md) |
+| 1.6.2 | TCP `link(2)` 在 hmdfs 上 EPERM → rename/copyFile | [FILE-TRANSFER-1.6.2-DEVICE-ACCEPTANCE-2026-09-07.md](./FILE-TRANSFER-1.6.2-DEVICE-ACCEPTANCE-2026-09-07.md) |
 
 选路、`mode`、工具合并都在**设备 gateway**上完成。服务器继续提供管子，不为 auto 增加第四个服务，也不把三种数据面合成一个进程。
 
@@ -100,7 +109,7 @@ base64 **不是**边车上的第四个进程。
 }
 ```
 
-peer 仍需 `tunnelDeviceId`。`receiveDir` 可省略，默认数据目录 `a2a-files`。
+peer 仍需 `tunnelDeviceId`。`receiveDir` 可省略（实现默认落在 OpenClaw 状态目录下的 `a2a-files`）；真机若要在文件管理器打开，建议显式设为 `…/Docs/OPENCLAW`（1.6.2 起 TCP 可在该目录提交）。
 
 | 字段 | 何时需要 |
 |------|----------|

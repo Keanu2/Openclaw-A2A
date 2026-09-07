@@ -34,6 +34,11 @@ export interface PeerConfig {
    * is forwarded via the embedded tunnel-client (relay device_id).
    */
   tunnelDeviceId?: string;
+  /**
+   * Cached Agent Card (e.g. from registry). Used for openclawFileTransfer
+   * capability selection; missing card → treat peer as legacy inline-only.
+   */
+  agentCard?: Record<string, unknown>;
 }
 
 // ---------------------------------------------------------------------------
@@ -137,6 +142,8 @@ export interface GatewayConfig {
     /** Directory to save decoded files. Default: os.tmpdir() + "/a2a-files" */
     tempDir: string;
   };
+  /** Out-of-band TLS/TCP streaming data plane for local files. */
+  fileTransfer?: import("./file-transfer.js").FileTransferConfig;
   /**
    * Embedded a2a-relay tunnel-client. Disabled by default (direct networking).
    * Compatible with the standalone tunnel-client + relay-server.py protocol.

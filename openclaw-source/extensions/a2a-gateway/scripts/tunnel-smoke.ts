@@ -3,7 +3,7 @@
  * 手工冒烟脚本：不依赖 OpenClaw，验证「迷你中继 + 双 TunnelSession」能否互通。
  *
  * 用法：
- *   cd openclaw-a2a-gateway-tunnel
+ *   cd Openclaw-A2A
  *   npm install
  *   npx tsx scripts/tunnel-smoke.ts
  *

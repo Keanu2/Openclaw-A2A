@@ -2,7 +2,7 @@
   "id": "a2a-gateway",
   "name": "A2A Gateway",
   "description": "OpenClaw A2A v0.3.0 gateway with optional embedded tunnel-client for NAT traversal",
-  "version": "1.4.3",
+  "version": "1.6.2",
   "defaultConfig": {
     "agentCard": {
       "name": "OpenClaw A2A Gateway",
@@ -365,6 +365,52 @@
           "tempDir": {
             "type": "string",
             "description": "Directory for received files. Original filenames are preserved; conflicts become name (1).ext"
+          }
+        }
+      },
+      "fileTransfer": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "Independent TLS/TCP/QUIC streaming data plane for local A2A files. Control messages still use the A2A tunnel.",
+        "properties": {
+          "enabled": { "type": "boolean", "default": false },
+          "mode": {
+            "type": "string",
+            "enum": ["auto", "quic", "tcp", "base64"],
+            "default": "auto",
+            "description": "Send policy. auto uses peer Agent Card intersection (quic→tcp→base64) before first payload byte."
+          },
+          "host": { "type": "string", "description": "Public File Relay host or IP (shared by TCP and QUIC)" },
+          "port": { "type": "number", "default": 8001, "minimum": 1, "maximum": 65535 },
+          "serverName": { "type": "string", "default": "a2a-file.invalid", "description": "TLS SNI used by Nginx to select the file data plane" },
+          "certificateSha256": { "type": "string", "description": "SHA-256 of the DER server certificate for certificate pinning" },
+          "receiveDir": { "type": "string", "description": "Directory where verified files are atomically saved" },
+          "maxFileSizeBytes": { "type": "number", "default": 1073741824, "minimum": 0 },
+          "maxConcurrentReceives": { "type": "number", "default": 4, "minimum": 1, "description": "Maximum simultaneous inbound stream transfers" },
+          "maxInFlightBytes": { "type": "number", "default": 2147483648, "minimum": 0, "description": "Maximum declared bytes reserved by simultaneous inbound transfers" },
+          "connectTimeoutMs": { "type": "number", "default": 15000, "minimum": 1000 },
+          "transferTimeoutMs": { "type": "number", "default": 1800000, "minimum": 10000 },
+          "inlinePreferredBelowBytes": { "type": "number", "default": 1048576, "minimum": 0, "description": "Under auto, files at or below this size use inline-base64" },
+          "autoPeers": { "type": "array", "items": { "type": "string" }, "description": "Deprecated; Card intersection replaces this allowlist" },
+          "order": {
+            "type": "array",
+            "items": { "type": "string", "enum": ["quic-v7", "tcp-v1", "inline-base64"] },
+            "description": "Deprecated; auto order is quic→tcp→base64"
+          },
+          "quic": {
+            "type": "object",
+            "additionalProperties": false,
+            "description": "QUIC helper settings. Advertise quic-v7 only when binary exists on disk.",
+            "properties": {
+              "enabled": { "type": "boolean", "default": false, "description": "Deprecated; presence of binary + mode controls QUIC" },
+              "binary": { "type": "string", "default": "/data/local/tmp/a2a-rcp/rcp-raw-stream-v7" },
+              "extraEnv": { "type": "object", "additionalProperties": { "type": "string" } },
+              "relayHost": { "type": "string", "description": "Defaults to fileTransfer.host" },
+              "relayPort": { "type": "number", "default": 8008, "minimum": 1, "maximum": 65535 },
+              "connectTimeoutMs": { "type": "number", "default": 15000, "minimum": 1000 },
+              "transferTimeoutMs": { "type": "number", "default": 1800000, "minimum": 10000 },
+              "stallTimeoutMs": { "type": "number", "default": 120000, "minimum": 5000 }
+            }
           }
         }
       },

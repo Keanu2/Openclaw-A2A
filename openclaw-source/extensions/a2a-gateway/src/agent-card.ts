@@ -1,5 +1,6 @@
 import type { AgentCard, AgentSkill } from "@a2a-js/sdk";
 
+import { isQuicBinaryAvailable, localCapability } from "./file-transfer-capability.js";
 import type { GatewayConfig } from "./types.js";
 
 function toSkill(entry: string | { id?: string; name: string; description?: string }, index: number): AgentSkill {
@@ -75,11 +76,35 @@ export function buildAgentCard(config: GatewayConfig): AgentCard {
     ],
   };
 
-  // Registry auto-bind + far-field peers use metadata.tunnelDeviceId
-  if (tunnelDeviceId) {
-    (card as AgentCard & { metadata?: Record<string, unknown> }).metadata = {
-      tunnelDeviceId,
+  const metadata: Record<string, unknown> = {};
+  if (tunnelDeviceId) metadata.tunnelDeviceId = tunnelDeviceId;
+
+  // Advertise only transports this host can actually receive right now.
+  // Stream receive still requires fileTransfer.enabled; inline receive does not,
+  // but we still list inline when streaming is on so peers can auto-select.
+  if (config.fileTransfer?.enabled) {
+    const maxInline = config.security?.maxInlineFileSizeBytes ?? 52_428_800;
+    const cap = localCapability(config.fileTransfer, maxInline);
+    // Ensure quic binary check is consistent even if config.quic was partially set
+    const transports = [...cap.transports];
+    if (
+      transports.includes("quic-v7") &&
+      !isQuicBinaryAvailable(config.fileTransfer.quic?.binary)
+    ) {
+      const idx = transports.indexOf("quic-v7");
+      if (idx >= 0) transports.splice(idx, 1);
+    }
+    metadata.openclawFileTransfer = {
+      version: 1,
+      control: "tunnel",
+      transports,
+      maxStreamBytes: config.fileTransfer.maxFileSizeBytes,
+      maxInlineBytes: maxInline,
     };
+  }
+
+  if (Object.keys(metadata).length > 0) {
+    (card as AgentCard & { metadata?: Record<string, unknown> }).metadata = metadata;
   }
 
   return card;

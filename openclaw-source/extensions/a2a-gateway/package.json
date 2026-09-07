@@ -1,8 +1,8 @@
-{
+﻿{
   "name": "@openclaw/a2a-gateway",
   "version": "2026.3.13",
   "private": true,
-  "description": "OpenClaw A2A gateway plugin with embedded tunnel-client (synced from Openclaw-A2A 1.4.3)",
+  "description": "OpenClaw A2A gateway plugin with embedded tunnel-client (synced from openclaw-a2a 1.6.2)",
   "type": "module",
   "license": "MIT",
   "dependencies": {

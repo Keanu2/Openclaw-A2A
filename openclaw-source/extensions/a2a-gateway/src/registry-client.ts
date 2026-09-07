@@ -262,6 +262,7 @@ export class RegistryClient {
         // Host ignored when tunnelDeviceId is set; keep valid A2A path.
         agentCardUrl: "http://127.0.0.1:18800/.well-known/agent-card.json",
         tunnelDeviceId: row.tunnelDeviceId,
+        agentCard: row.agentCard,
       };
       if (this.config.defaultPeerAuth) {
         peer.auth = { ...this.config.defaultPeerAuth };

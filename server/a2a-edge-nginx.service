@@ -1,0 +1,24 @@
+[Unit]
+Description=OpenClaw A2A Nginx TCP edge on port 8001
+After=docker.service agentregistry.service a2a-file-relay.service
+Requires=docker.service
+Wants=agentregistry.service a2a-file-relay.service
+
+[Service]
+Type=simple
+ExecStartPre=-/usr/bin/docker rm -f openclaw-a2a-edge-nginx
+ExecStart=/usr/bin/docker run --name openclaw-a2a-edge-nginx --network host \
+  -v /home/edge/openclaw-a2a-edge/nginx-a2a.conf:/etc/nginx/nginx.conf:ro \
+  -v /home/edge/openclaw-a2a-edge/tls.crt:/etc/openclaw-a2a/tls.crt:ro \
+  -v /home/edge/openclaw-a2a-edge/tls.key:/etc/openclaw-a2a/tls.key:ro \
+  -v /home/edge/openclaw-a2a-edge/logs:/var/log/openclaw-a2a \
+  nginx:1.29.1-alpine
+ExecStop=/usr/bin/docker stop -t 10 openclaw-a2a-edge-nginx
+ExecStopPost=-/usr/bin/docker rm -f openclaw-a2a-edge-nginx
+Restart=on-failure
+RestartSec=3
+TimeoutStartSec=60
+TimeoutStopSec=30
+
+[Install]
+WantedBy=multi-user.target

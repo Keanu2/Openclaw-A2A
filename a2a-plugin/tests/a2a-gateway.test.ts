@@ -24,6 +24,7 @@ describe("zero-config install (issue #7)", () => {
     assert.ok(harness.service, "service should be registered even with empty config");
     assert.ok(harness.methods.has("a2a.send"), "a2a.send method should be registered");
     assert.ok(harness.methods.has("a2a.send_local_file"), "a2a.send_local_file method should be registered");
+    assert.ok(harness.methods.has("a2a.send_file"), "a2a.send_file TCP streaming method should be registered");
     assert.ok(harness.methods.has("a2a.metrics"), "a2a.metrics method should be registered");
     assert.ok(harness.methods.has("a2a.registry.register"), "a2a.registry.register should be registered");
     assert.ok(harness.methods.has("a2a.registry.list"), "a2a.registry.list should be registered");
@@ -402,7 +403,7 @@ describe("a2a-gateway plugin", () => {
         "should include the filename",
       );
       assert.ok(
-        capturedMessage.includes("saved to"),
+        capturedMessage.includes("落盘") || capturedMessage.includes("saved to"),
         "should mention saved file path for base64 content",
       );
       assert.ok(
@@ -775,14 +776,16 @@ describe("a2a-gateway plugin", () => {
       path: "relative/photo.jpg",
     });
     assert.equal(relative.ok, false);
-    assert.match(String(relative.error || ""), /absolute|Path rejected/i);
+    const relativeErr = String((relative.data as any)?.error || "");
+    assert.match(relativeErr, /absolute|Path rejected/i);
 
     const disallowed = await invokeGatewayMethod(harness, "a2a.send_local_file", {
       peer: "peer-1",
       path: "/etc/passwd",
     });
     assert.equal(disallowed.ok, false);
-    assert.match(String(disallowed.error || ""), /Path rejected|allowed roots/i);
+    const disallowedErr = String((disallowed.data as any)?.error || "");
+    assert.match(disallowedErr, /Path rejected|allowed roots/i);
   });
 
   it("a2a.send_local_file reads local path and sends FilePart bytes", async () => {
@@ -842,7 +845,9 @@ describe("a2a-gateway plugin", () => {
       });
 
       assert.equal(result.ok, true, JSON.stringify(result));
-      assert.equal(result.sizeBytes, Buffer.byteLength("hello-a2a-local"));
+      const payload = result.data as Record<string, unknown>;
+      assert.equal(payload.sizeBytes, Buffer.byteLength("hello-a2a-local"));
+      assert.equal(payload.transport, "inline-base64");
       assert.equal(received.length, 1);
 
       const params = received[0].params as any;

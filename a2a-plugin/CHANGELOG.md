@@ -4,6 +4,70 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.6.2] - 2026-09-07
+
+### Fixed
+
+- TCP commit on HarmonyOS `Docs/OPENCLAW`: if `link(2)` returns `EPERM`/`EXDEV`, fall back to `rename` then `copyFile` so `tcp-v1` can land on shared media filesystems.
+
+## [1.6.1] - 2026-09-04
+
+### Fixed
+
+- Do not send `a2a-transfer://` until the receiver store reports `DATA_COMMITTED` / `COMPLETED` (no notify after wait timeout).
+- `/a2a/file-transfer/status` returns `RECEIVING` while an active receive is in flight (avoids false 404 during QUIC).
+- Inbound executor waits up to 90s for `a2a-transfer://` resolution before failing the task.
+
+### Changed
+
+- Device configure script default `receiveDir` examples use OpenClaw state dir (`…/.openclaw/a2a-files`) and keep QUIC `LD_LIBRARY_PATH`. Production devices that need file-manager visibility should set `receiveDir` to `…/Docs/OPENCLAW` (TCP commit on that FS requires **1.6.2**).
+
+## [1.6.0] - 2026-09-03
+
+### Added
+
+- Unified local-file send: `fileTransfer.mode` (`auto` | `quic` | `tcp` | `base64`) plus peer Agent Card intersection.
+- `auto` selects quic→tcp→base64 before the first payload byte; pre-start prepare failures may try the next candidate only.
+- Agent Card advertises `quic-v7` only when the helper binary exists on disk.
+- Registry peers carry cached `agentCard` for capability selection; tunnel GET card is a fallback.
+
+### Changed
+
+- `a2a.send_file` / `a2a_send_file` and `a2a.send_local_file` / `a2a_send_local_file` share one send path (local `path`).
+- `quic.relayHost` defaults to `fileTransfer.host`.
+- Deprecated as user knobs: `quic.enabled`, `order`, `autoPeers` (still parsed for compatibility).
+
+## [1.5.1] - 2026-09-03
+
+### Added
+
+- Contract-first file data plane: `transferId` + `attemptId`, transport names (`tcp-v1` / `quic-v7` / `inline-base64`), capability selection helpers.
+- `quic-v7` provider via `rcp-raw-stream-v7` child process (HMAC channel derivation, RESULT parsing, status poll before A2A notify).
+- Agent Card `metadata.openclawFileTransfer` when streaming is enabled.
+- `a2a.send_file` accepts optional `transport` (`tcp-v1` default, `quic-v7` when configured).
+
+### Fixed
+
+- QUIC notify race: wait for receiver `DATA_COMMITTED` before sending `a2a-transfer://` FilePart.
+- QUIC receive path avoids clobbering an existing same-name file.
+
+## [1.5.0] - 2026-08-18
+
+### Added
+
+- `a2a.send_file` and local-path support in `a2a_send_file`, using a TLS/TCP streaming data plane while the existing A2A tunnel remains the control plane.
+- Receiver-side bounded streaming, SHA-256 verification, `.part` cleanup and atomic rename.
+- Short-lived per-transfer pairing tickets, TLS certificate pinning and an independent in-memory File Relay.
+- Nginx SNI routing so A2A control traffic and raw file streams share public TCP 8001 without sharing an application process.
+
+### Fixed
+
+- Hardened File Relay registration parsing, zero-byte transfers, disconnect handling, progress-based stall timeouts, graceful shutdown and bounded session/connection/in-flight resources.
+- Made receive commits durable and no-clobber with complete writes, file/directory sync, persistent transfer states, restart recovery, status and cancel endpoints.
+- Bound sends to a verified source-file snapshot and close sockets/file descriptors on every failure path.
+- Added post-commit `a2a-transfer://` FilePart notification so the receiver agent sees the saved file; ambiguous final-ACK failures now query durable receiver state before any retry.
+- Added filename portability rules, strict ACK identity checks, small control-plane body limits and relay failure-path tests in CI.
+
 ## [1.4.0] - 2026-04-04
 
 ### Added

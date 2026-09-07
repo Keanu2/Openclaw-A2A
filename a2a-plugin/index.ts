@@ -10,6 +10,7 @@ import type { Server } from "node:http";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { performance } from "node:perf_hooks";
 
 import { AGENT_CARD_PATH } from "@a2a-js/sdk";
 import { DefaultRequestHandler } from "@a2a-js/sdk/server";
@@ -73,6 +74,34 @@ import {
   parseSaturationConfig,
   type SaturationConfig,
 } from "./src/saturation-model.js";
+import {
+  inspectFile,
+  FileTransferStore,
+  newAttemptId,
+  newTransferId,
+  newTransferTicket,
+  publicTransferStatus,
+  recordMatchesOffer,
+  safeTransferName,
+  sendFilePayload,
+  startFileReceive,
+  validateFileOffer,
+  type FileOffer,
+} from "./src/file-transfer.js";
+import {
+  describeQuicChannel,
+  sendQuicPayload,
+  startQuicReceive,
+} from "./src/quic-provider.js";
+import {
+  ensureOfferAttempt,
+  isPreStartTransportFailure,
+  isQuicBinaryAvailable,
+  listTransportCandidates,
+  parseFileTransferMode,
+  peerCapabilityFromAgentCard,
+  selectTransport,
+} from "./src/file-transfer-capability.js";
 
 /** Build a JSON-RPC error response. */
 function jsonRpcError(id: string | number | null, code: number, message: string) {
@@ -246,6 +275,7 @@ export function parseConfig(raw: unknown, resolvePath?: (nextPath: string) => st
   const retry = asObject(resilience.retry);
   const circuitBreaker = asObject(resilience.circuitBreaker);
   const discoveryRaw = config.discovery ? asObject(config.discovery) : undefined;
+  const fileTransfer = asObject(config.fileTransfer);
 
   const inboundAuth = asString(security.inboundAuth, "none") as InboundAuth;
 
@@ -404,6 +434,71 @@ export function parseConfig(raw: unknown, resolvePath?: (nextPath: string) => st
         tempDir: resolveConfiguredPath(tempDir, tempDir, resolvePath),
       };
     })(),
+    fileTransfer: config.fileTransfer ? (() => {
+      const maxFileSizeBytes = Math.max(0, Math.floor(asNumber(fileTransfer.maxFileSizeBytes, 1_073_741_824)));
+      const host = asString(fileTransfer.host, "");
+      const mode = parseFileTransferMode(fileTransfer.mode, "auto");
+      const quicRaw = asObject(fileTransfer.quic);
+      const quicBinary = asString(quicRaw.binary, "/data/local/tmp/a2a-rcp/rcp-raw-stream-v7");
+      // Populate quic settings whenever binary/path is configured or legacy enabled=true.
+      // Card/localCapability still require the binary file to exist on disk.
+      const wantQuic =
+        asBoolean(quicRaw.enabled, false) ||
+        typeof quicRaw.binary === "string" ||
+        mode === "quic" ||
+        mode === "auto";
+      return {
+        enabled: asBoolean(fileTransfer.enabled, false),
+        mode,
+        host,
+        port: Math.floor(asNumber(fileTransfer.port, 8001)),
+        serverName: asString(fileTransfer.serverName, "a2a-file.invalid"),
+        certificateSha256: asString(fileTransfer.certificateSha256, "") || undefined,
+        receiveDir: resolveConfiguredPath(
+          fileTransfer.receiveDir,
+          defaultOpenClawDataDir("a2a-files"),
+          resolvePath,
+        ),
+        maxFileSizeBytes,
+        maxConcurrentReceives: Math.max(1, Math.floor(asNumber(fileTransfer.maxConcurrentReceives, 4))),
+        maxInFlightBytes: Math.max(
+          maxFileSizeBytes,
+          Math.floor(asNumber(fileTransfer.maxInFlightBytes, 2_147_483_648)),
+        ),
+        connectTimeoutMs: Math.max(1_000, Math.floor(asNumber(fileTransfer.connectTimeoutMs, 15_000))),
+        transferTimeoutMs: Math.max(10_000, Math.floor(asNumber(fileTransfer.transferTimeoutMs, 1_800_000))),
+        inlinePreferredBelowBytes: Math.max(
+          0,
+          Math.floor(asNumber(fileTransfer.inlinePreferredBelowBytes, 1_048_576)),
+        ),
+        autoPeers: Array.isArray(fileTransfer.autoPeers)
+          ? (fileTransfer.autoPeers as unknown[]).filter((v): v is string => typeof v === "string")
+          : [],
+        order: Array.isArray(fileTransfer.order)
+          ? (fileTransfer.order as unknown[]).filter(
+            (v): v is "inline-base64" | "quic-v7" | "tcp-v1" =>
+              v === "inline-base64" || v === "quic-v7" || v === "tcp-v1",
+          )
+          : undefined,
+        quic: wantQuic ? {
+          enabled: isQuicBinaryAvailable(quicBinary),
+          binary: quicBinary,
+          extraEnv: (() => {
+            const envObj = asObject(quicRaw.extraEnv);
+            const out: Record<string, string> = {};
+            for (const [k, v] of Object.entries(envObj)) {
+              if (typeof v === "string") out[k] = v;
+            }
+            return out;
+          })(),
+          relayHost: asString(quicRaw.relayHost, host || "121.37.53.35"),
+          relayPort: Math.floor(asNumber(quicRaw.relayPort, 8008)),
+          connectTimeoutMs: Math.max(1_000, Math.floor(asNumber(quicRaw.connectTimeoutMs, 15_000))),
+          transferTimeoutMs: Math.max(10_000, Math.floor(asNumber(quicRaw.transferTimeoutMs, 1_800_000))),
+          stallTimeoutMs: Math.max(5_000, Math.floor(asNumber(quicRaw.stallTimeoutMs, 120_000))),
+        } : undefined,
+      };
+    })() : undefined,
   };
 }
 
@@ -658,6 +753,196 @@ const plugin = {
     // req._body is already set). base64 inflates ~4/3; add 1MB envelope headroom.
     const a2aJsonBodyLimit = Math.ceil(config.security.maxInlineFileSizeBytes * 1.4) + 1_048_576;
     const a2aJsonParser = express.json({ limit: a2aJsonBodyLimit });
+    const fileControlJsonParser = express.json({ limit: 32 * 1024 });
+
+    // Internal file-transfer control plane. This endpoint is reached through
+    // the existing A2A WebSocket tunnel; file bytes never enter this request.
+    const fileTransferStore = config.fileTransfer?.enabled ? new FileTransferStore(config.fileTransfer) : undefined;
+    let activeReceiveBytes = 0;
+    type ActiveReceive = {
+      offer: FileOffer;
+      cancel: (reason?: string) => void;
+      completed: Promise<{ transferId: string; size: number; path: string }>;
+    };
+    const activeFileReceives = new Map<string, ActiveReceive>();
+    const fileTransferRecovery = fileTransferStore
+      ? fileTransferStore.recoverInterrupted().then((count) => {
+        if (count > 0) api.logger.warn(`a2a-file-transfer: recovered ${count} interrupted transfer record(s)`);
+      }).catch((error: unknown) => {
+        api.logger.warn(`a2a-file-transfer: state recovery failed: ${error instanceof Error ? error.message : String(error)}`);
+        throw error;
+      })
+      : Promise.resolve();
+    app.post("/a2a/file-transfer/prepare", fileControlJsonParser, async (req, res) => {
+      try {
+        const fileConfig = config.fileTransfer;
+        if (!fileConfig?.enabled || !fileTransferStore) {
+          res.status(503).json({ ok: false, error: "fileTransfer is disabled" });
+          return;
+        }
+        // Recovery may delete an interrupted .part. Never admit a new receive
+        // until that one-time scan has completed.
+        await fileTransferRecovery;
+        const offer = asObject(req.body) as unknown as FileOffer;
+        validateFileOffer(offer, fileConfig.maxFileSizeBytes);
+        if (config.tunnel?.deviceId && offer.targetDevice !== config.tunnel.deviceId) {
+          res.status(403).json({ ok: false, error: "targetDevice does not match this gateway" });
+          return;
+        }
+        const existing = await fileTransferStore.load(offer.transferId);
+        if (existing) {
+          if (!recordMatchesOffer(existing, offer)) {
+            res.status(409).json({ ok: false, error: "transferId belongs to a different file offer" });
+            return;
+          }
+          if (existing.state === "DATA_COMMITTED" || existing.state === "COMPLETED") {
+            res.json({ ...publicTransferStatus(existing), alreadyCommitted: true });
+            return;
+          }
+        }
+        if (activeFileReceives.has(offer.transferId)) {
+          res.status(409).json({ ok: false, error: "transferId is already active" });
+          return;
+        }
+        if (
+          activeFileReceives.size >= fileConfig.maxConcurrentReceives ||
+          activeReceiveBytes + offer.size > fileConfig.maxInFlightBytes
+        ) {
+          res.status(429).json({ ok: false, error: "receiver is busy", code: "BUSY" });
+          return;
+        }
+
+        const transport = offer.transport === "quic-v7" ? "quic-v7" : "tcp-v1";
+        let active: ActiveReceive;
+        if (transport === "quic-v7") {
+          if (!fileConfig.quic || !isQuicBinaryAvailable(fileConfig.quic.binary)) {
+            res.status(503).json({ ok: false, error: "quic-v7 is not available on this gateway" });
+            return;
+          }
+          const quicReceive = startQuicReceive(fileConfig.quic, offer, fileConfig.receiveDir);
+          const channelInfo = describeQuicChannel(offer);
+          active = {
+            offer,
+            cancel: quicReceive.cancel,
+            completed: quicReceive.completed,
+          };
+          activeReceiveBytes += offer.size;
+          activeFileReceives.set(offer.transferId, active);
+          quicReceive.completed
+            .then(async (result) => {
+              await fileTransferStore.save({
+                version: 1,
+                transferId: offer.transferId,
+                attemptId: offer.attemptId,
+                transport: "quic-v7",
+                sourceDevice: offer.sourceDevice,
+                targetDevice: offer.targetDevice,
+                name: offer.name,
+                mimeType: offer.mimeType,
+                size: result.size,
+                sha256: result.sha256,
+                state: "DATA_COMMITTED",
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString(),
+                path: result.path,
+              });
+              api.logger.info(
+                `a2a-file-transfer: quic received id=${result.transferId} size=${result.size} channel=${channelInfo.fingerprint}`,
+              );
+            })
+            .catch((error: unknown) => api.logger.warn(
+              `a2a-file-transfer: quic receive failed id=${offer.transferId}: ${error instanceof Error ? error.message : String(error)}`,
+            ))
+            .finally(() => {
+              activeFileReceives.delete(offer.transferId);
+              activeReceiveBytes = Math.max(0, activeReceiveBytes - offer.size);
+            });
+          await quicReceive.ready;
+          res.json({
+            ok: true,
+            transferId: offer.transferId,
+            attemptId: offer.attemptId,
+            transport: "quic-v7",
+            receiverReady: true,
+            channelFingerprint: channelInfo.fingerprint,
+          });
+          return;
+        }
+
+        const receive = startFileReceive(fileConfig, offer, { store: fileTransferStore });
+        active = { offer, cancel: receive.cancel, completed: receive.completed };
+        activeReceiveBytes += offer.size;
+        activeFileReceives.set(offer.transferId, active);
+        receive.completed
+          .then((result) => api.logger.info(
+            `a2a-file-transfer: received id=${result.transferId} size=${result.size} path=${result.path}`,
+          ))
+          .catch((error: unknown) => api.logger.warn(
+            `a2a-file-transfer: receive failed id=${offer.transferId}: ${error instanceof Error ? error.message : String(error)}`,
+          ))
+          .finally(() => {
+            activeFileReceives.delete(offer.transferId);
+            activeReceiveBytes = Math.max(0, activeReceiveBytes - offer.size);
+          });
+        await receive.ready;
+        res.json({
+          ok: true,
+          transferId: offer.transferId,
+          attemptId: offer.attemptId,
+          transport: "tcp-v1",
+          receiverReady: true,
+        });
+      } catch (error) {
+        res.status(400).json({ ok: false, error: error instanceof Error ? error.message : String(error) });
+      }
+    });
+
+    app.post("/a2a/file-transfer/status", fileControlJsonParser, async (req, res) => {
+      try {
+        if (!fileTransferStore) return void res.status(503).json({ ok: false, error: "fileTransfer is disabled" });
+        const transferId = asString(asObject(req.body).transferId, "");
+        const active = transferId ? activeFileReceives.get(transferId) : undefined;
+        if (active) {
+          return void res.json({
+            ok: true,
+            transferId: active.offer.transferId,
+            attemptId: active.offer.attemptId,
+            transport: active.offer.transport,
+            state: "RECEIVING",
+            name: active.offer.name,
+            mimeType: active.offer.mimeType,
+            size: active.offer.size,
+            sha256: active.offer.sha256,
+          });
+        }
+        const status = transferId ? await fileTransferStore.getPublicStatus(transferId) : null;
+        if (!status) return void res.status(404).json({ ok: false, error: "transfer not found" });
+        res.json(status);
+      } catch (error) {
+        res.status(400).json({ ok: false, error: error instanceof Error ? error.message : String(error) });
+      }
+    });
+
+    app.post("/a2a/file-transfer/cancel", fileControlJsonParser, async (req, res) => {
+      try {
+        if (!fileTransferStore) return void res.status(503).json({ ok: false, error: "fileTransfer is disabled" });
+        const transferId = asString(asObject(req.body).transferId, "");
+        const active = activeFileReceives.get(transferId);
+        if (active) {
+          active.cancel("canceled by sender");
+          return void res.status(202).json({ ok: true, transferId, cancelRequested: true });
+        }
+        const status = transferId ? await fileTransferStore.getPublicStatus(transferId) : null;
+        if (!status) return void res.status(404).json({ ok: false, error: "transfer not found" });
+        if (status.state === "DATA_COMMITTED" || status.state === "COMPLETED") {
+          return void res.status(409).json({ ...status, ok: false, error: "file is already committed" });
+        }
+        res.json(status);
+      } catch (error) {
+        res.status(400).json({ ok: false, error: error instanceof Error ? error.message : String(error) });
+      }
+    });
+
     app.use(a2aJsonParser);
 
     const createHttpMetricsMiddleware =
@@ -1089,6 +1374,391 @@ const plugin = {
       }
     };
 
+    const sendStreamFileCore = async (params: {
+      peer: string;
+      path: string;
+      mimeType?: string;
+      text?: string;
+      agentId?: string;
+      transport?: "tcp-v1" | "quic-v7";
+    }) => {
+      const fileConfig = config.fileTransfer;
+      if (!fileConfig?.enabled) return { ok: false as const, error: "fileTransfer is disabled" };
+      if (!fileConfig.host) return { ok: false as const, error: "fileTransfer.host is required" };
+      if (!tunnelSession?.isConnected || !config.tunnel?.deviceId) {
+        return { ok: false as const, error: "A2A tunnel is not connected" };
+      }
+      const peer = findPeer(params.peer);
+      if (!peer?.tunnelDeviceId) {
+        return { ok: false as const, error: `Peer does not have tunnelDeviceId: ${params.peer}` };
+      }
+      const pathCheck = isAllowedLocalPath(params.path);
+      if (!pathCheck.ok) return { ok: false as const, error: `Path rejected: ${pathCheck.reason}` };
+      const filePath = pathCheck.resolved;
+      const mimeType = (params.mimeType && String(params.mimeType).trim()) || detectMimeType(filePath);
+      if (!validateMimeType(mimeType, config.security.allowedMimeTypes)) {
+        return { ok: false as const, error: `MIME type rejected: "${mimeType}" is not in the allowed list` };
+      }
+      const transport = params.transport === "quic-v7" ? "quic-v7" : "tcp-v1";
+      if (transport === "quic-v7" && (!fileConfig.quic || !isQuicBinaryAvailable(fileConfig.quic.binary))) {
+        return { ok: false as const, error: "quic-v7 is not available (helper binary missing)" };
+      }
+      try {
+        const hashStarted = performance.now();
+        const inspected = await inspectFile(filePath, fileConfig.maxFileSizeBytes);
+        const hashMs = performance.now() - hashStarted;
+        const attemptId = newAttemptId();
+        const offer = ensureOfferAttempt({
+          transferId: newTransferId(),
+          ticket: newTransferTicket(),
+          sourceDevice: config.tunnel.deviceId,
+          targetDevice: peer.tunnelDeviceId,
+          name: safeTransferName(path.basename(filePath)),
+          mimeType,
+          size: inspected.size,
+          sha256: inspected.sha256,
+        }, transport, attemptId);
+        const controlStarted = performance.now();
+        const prepared = await tunnelSession.forward(peer.tunnelDeviceId, {
+          method: "POST",
+          path: "/a2a/file-transfer/prepare",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(offer),
+        }, fileConfig.connectTimeoutMs + 10_000);
+        const controlPrepareMs = performance.now() - controlStarted;
+        if (prepared.status !== 200) {
+          return { ok: false as const, error: `Receiver prepare failed (${prepared.status}): ${prepared.body}` };
+        }
+        let prepareBody: Record<string, unknown> = {};
+        try {
+          prepareBody = asObject(JSON.parse(prepared.body));
+        } catch {
+          return { ok: false as const, error: "Receiver prepare returned invalid JSON" };
+        }
+
+        let transferred: Awaited<ReturnType<typeof sendFilePayload>> | Awaited<ReturnType<typeof sendQuicPayload>> | undefined;
+        let dataCommitted = prepareBody.alreadyCommitted === true;
+        if (!dataCommitted) {
+          try {
+            if (transport === "quic-v7") {
+              transferred = await sendQuicPayload(fileConfig.quic!, offer, filePath, controlPrepareMs);
+            } else {
+              transferred = await sendFilePayload(fileConfig, offer, filePath, controlPrepareMs, inspected);
+            }
+            dataCommitted = true;
+          } catch (sendError) {
+            const statusResponse = await tunnelSession.forward(peer.tunnelDeviceId, {
+              method: "POST",
+              path: "/a2a/file-transfer/status",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify({ transferId: offer.transferId }),
+            }, fileConfig.connectTimeoutMs + 10_000).catch(() => null);
+            if (statusResponse?.status === 200) {
+              try {
+                const statusBody = asObject(JSON.parse(statusResponse.body));
+                dataCommitted = statusBody.state === "DATA_COMMITTED" || statusBody.state === "COMPLETED";
+              } catch {
+                dataCommitted = false;
+              }
+            }
+            if (!dataCommitted) {
+              await tunnelSession.forward(peer.tunnelDeviceId, {
+                method: "POST",
+                path: "/a2a/file-transfer/cancel",
+                headers: { "content-type": "application/json" },
+                body: JSON.stringify({ transferId: offer.transferId }),
+              }, fileConfig.connectTimeoutMs + 10_000).catch(() => undefined);
+              throw sendError;
+            }
+          }
+        }
+
+        // Helper RESULT can arrive before the receiver Node process persists DATA_COMMITTED.
+        // Never send a2a-transfer:// until the receiver store confirms commit.
+        if (dataCommitted) {
+          const waitMs = Math.max(
+            30_000,
+            Math.min(fileConfig.transferTimeoutMs, transport === "quic-v7" ? 180_000 : 60_000),
+          );
+          const deadline = Date.now() + waitMs;
+          let receiverCommitted = false;
+          while (Date.now() < deadline) {
+            const statusResponse = await tunnelSession.forward(peer.tunnelDeviceId, {
+              method: "POST",
+              path: "/a2a/file-transfer/status",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify({ transferId: offer.transferId }),
+            }, fileConfig.connectTimeoutMs + 5_000).catch(() => null);
+            if (statusResponse?.status === 200) {
+              try {
+                const statusBody = asObject(JSON.parse(statusResponse.body));
+                const state = asString(statusBody.state, "");
+                if (state === "DATA_COMMITTED" || state === "COMPLETED") {
+                  receiverCommitted = true;
+                  break;
+                }
+                // RECEIVING / other in-flight states: keep waiting.
+              } catch {
+                // keep waiting
+              }
+            }
+            await new Promise((r) => setTimeout(r, 200));
+          }
+          if (!receiverCommitted) {
+            return {
+              ok: false as const,
+              dataCommitted: true as const,
+              transferId: offer.transferId,
+              attemptId: offer.attemptId,
+              transport,
+              error: `File bytes may have arrived, but receiver has not reached DATA_COMMITTED within ${waitMs}ms; skipped a2a-transfer:// notification`,
+            };
+          }
+        }
+
+        const notificationParts: Array<Record<string, unknown>> = [];
+        if (params.text) notificationParts.push({ kind: "text", text: params.text });
+        notificationParts.push({
+          kind: "file",
+          file: {
+            uri: `a2a-transfer://${offer.transferId}`,
+            name: offer.name,
+            mimeType: offer.mimeType,
+          },
+        });
+        const notification: Record<string, unknown> = {
+          messageId: `file-${offer.transferId}`,
+          parts: notificationParts,
+        };
+        if (params.agentId) notification.agentId = params.agentId;
+        let notified: Awaited<ReturnType<typeof client.sendMessage>>;
+        try {
+          notified = await client.sendMessage(peer, notification, {
+            healthManager: healthManager ?? undefined,
+            retryConfig: config.resilience.retry,
+          });
+        } catch (notificationError) {
+          return {
+            ok: false as const,
+            dataCommitted: true as const,
+            transferId: offer.transferId,
+            error: `File data committed, but A2A notification failed: ${notificationError instanceof Error ? notificationError.message : String(notificationError)}`,
+          };
+        }
+        if (!notified.ok) {
+          return {
+            ok: false as const,
+            dataCommitted: true as const,
+            transferId: offer.transferId,
+            error: `File data committed, but A2A notification failed: ${JSON.stringify(notified.response)}`,
+          };
+        }
+        return {
+          ok: true as const,
+          peer: params.peer,
+          sourcePath: filePath,
+          mimeType,
+          hashMs,
+          transferId: offer.transferId,
+          attemptId: offer.attemptId,
+          transport,
+          size: offer.size,
+          sha256: offer.sha256,
+          dataCommitted: true as const,
+          doNotRetry: true as const,
+          notificationOk: true as const,
+          ...(transferred ? {
+            controlPrepareMs: transferred.controlPrepareMs,
+            senderSetupMs: transferred.senderSetupMs,
+            senderPayloadMs: transferred.senderPayloadMs,
+            senderAckWaitMs: transferred.senderAckWaitMs,
+            transferMs: transferred.transferMs,
+          } : { alreadyCommitted: true as const, controlPrepareMs }),
+          response: notified.response,
+        };
+      } catch (error) {
+        return { ok: false as const, error: error instanceof Error ? error.message : String(error) };
+      }
+    };
+
+    const resolveRemoteCapability = async (peer: PeerConfig) => {
+      if (peer.agentCard) {
+        return peerCapabilityFromAgentCard(peer.agentCard);
+      }
+      if (tunnelSession?.isConnected && peer.tunnelDeviceId) {
+        try {
+          for (const cardPath of ["/.well-known/agent-card.json", "/.well-known/agent.json"]) {
+            const cardRes = await tunnelSession.forward(peer.tunnelDeviceId, {
+              method: "GET",
+              path: cardPath,
+              headers: { accept: "application/json" },
+              body: "",
+            }, 10_000);
+            if (cardRes.status >= 200 && cardRes.status < 300 && cardRes.body) {
+              const card = JSON.parse(cardRes.body) as Record<string, unknown>;
+              peer.agentCard = card;
+              return peerCapabilityFromAgentCard(card);
+            }
+          }
+        } catch {
+          // Legacy assumption below
+        }
+      }
+      return null;
+    };
+
+    /**
+     * Unified local-file send: mode + Agent Card intersection pick transport
+     * before any payload. Auto may try the next candidate only on pre-start failures.
+     */
+    const sendUnifiedFileCore = async (params: {
+      peer: string;
+      path: string;
+      mimeType?: string;
+      text?: string;
+      agentId?: string;
+      /** Debug override; prefer fileTransfer.mode. */
+      transport?: "tcp-v1" | "quic-v7" | "inline-base64";
+    }) => {
+      const peer = findPeer(params.peer);
+      if (!peer) {
+        const available = getEffectivePeers().map((p) => p.name).join(", ") || "(none)";
+        return { ok: false as const, error: `Peer not found: "${params.peer}". Available peers: ${available}` };
+      }
+      const pathCheck = isAllowedLocalPath(params.path);
+      if (!pathCheck.ok) {
+        return { ok: false as const, error: `Path rejected: ${pathCheck.reason}` };
+      }
+      const filePath = pathCheck.resolved;
+
+      let st: fs.Stats;
+      try {
+        st = fs.statSync(filePath);
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err);
+        return { ok: false as const, error: `Cannot access file: ${msg}` };
+      }
+      if (!st.isFile()) {
+        return { ok: false as const, error: `Not a regular file: ${filePath}` };
+      }
+
+      const maxInline = config.security.maxInlineFileSizeBytes;
+      const fileConfig = config.fileTransfer;
+      // Synthetic config when streaming is off: still allow base64 via mode/auto for small files.
+      const selectConfig = fileConfig ?? {
+        enabled: false,
+        mode: "base64" as const,
+        host: "",
+        port: 8001,
+        serverName: "a2a-file.invalid",
+        receiveDir: "",
+        maxFileSizeBytes: maxInline,
+        maxConcurrentReceives: 1,
+        maxInFlightBytes: maxInline,
+        connectTimeoutMs: 15_000,
+        transferTimeoutMs: 60_000,
+        inlinePreferredBelowBytes: Math.min(maxInline, 1_048_576),
+      };
+
+      const remote = await resolveRemoteCapability(peer);
+      let candidates;
+      try {
+        candidates = listTransportCandidates({
+          config: selectConfig,
+          size: st.size,
+          maxInlineBytes: maxInline,
+          peerName: params.peer,
+          remote,
+          forced: params.transport,
+        });
+      } catch (err: unknown) {
+        return { ok: false as const, error: err instanceof Error ? err.message : String(err) };
+      }
+      if (candidates.length === 0) {
+        try {
+          selectTransport({
+            config: selectConfig,
+            size: st.size,
+            maxInlineBytes: maxInline,
+            peerName: params.peer,
+            remote,
+            forced: params.transport,
+          });
+        } catch (err: unknown) {
+          return { ok: false as const, error: err instanceof Error ? err.message : String(err) };
+        }
+        return { ok: false as const, error: `no available file transport for peer ${params.peer}` };
+      }
+
+      let lastError = "no available file transport";
+      for (const transport of candidates) {
+        if (transport === "inline-base64") {
+          const inline = await sendLocalFileCore({
+            peer: params.peer,
+            path: filePath,
+            mimeType: params.mimeType,
+            text: params.text,
+            agentId: params.agentId,
+          });
+          if (inline.ok) {
+            return { ...inline, transport: "inline-base64" as const };
+          }
+          lastError = inline.error;
+          // Inline failure is never a "try next stream" case.
+          return { ...inline, transport: "inline-base64" as const };
+        }
+
+        const streamed = await sendStreamFileCore({
+          peer: params.peer,
+          path: filePath,
+          mimeType: params.mimeType,
+          text: params.text,
+          agentId: params.agentId,
+          transport,
+        });
+        if (streamed.ok) return streamed;
+        lastError = streamed.error;
+        if ("dataCommitted" in streamed && streamed.dataCommitted) return streamed;
+        if (!isPreStartTransportFailure(streamed.error)) return streamed;
+        // Pre-start only: try next candidate under auto.
+      }
+      return { ok: false as const, error: lastError };
+    };
+
+    const respondUnifiedSend = (
+      respond: (ok: boolean, payload?: unknown, error?: { message: string; code: string }) => void,
+      result: Awaited<ReturnType<typeof sendUnifiedFileCore>>,
+    ) => {
+      if (result.ok) respond(true, result);
+      else respond(false, result, { message: result.error, code: "UNAVAILABLE" });
+    };
+
+    api.registerGatewayMethod("a2a.send_file", ({ params, respond }) => {
+      const peerName = typeof params?.peer === "string" ? params.peer : "";
+      const filePath = typeof params?.path === "string" ? params.path : "";
+      if (!peerName || !filePath) {
+        respond(false, { error: 'Required params: "peer" and "path"' });
+        return;
+      }
+      const forced =
+        params?.transport === "quic-v7" || params?.transport === "tcp-v1" || params?.transport === "inline-base64"
+          ? params.transport
+          : undefined;
+      void sendUnifiedFileCore({
+        peer: peerName,
+        path: filePath,
+        mimeType: typeof params?.mimeType === "string" ? params.mimeType : undefined,
+        text: typeof params?.text === "string" ? params.text : undefined,
+        agentId: typeof params?.agentId === "string" ? params.agentId : undefined,
+        transport: forced,
+      }).then((result) => respondUnifiedSend(respond, result)).catch((error: unknown) => {
+        const message = error instanceof Error ? error.message : String(error);
+        respond(false, { ok: false, error: message }, { message, code: "UNAVAILABLE" });
+      });
+    });
+    api.logger.info("a2a-gateway: registered gateway method a2a.send_file (unified mode+Card selection)");
+
+    // Alias: same unified path (legacy name).
     api.registerGatewayMethod("a2a.send_local_file", ({ params, respond }) => {
       const peerName = typeof params?.peer === "string" ? params.peer : "";
       const filePath = typeof params?.path === "string" ? params.path : "";
@@ -1096,26 +1766,18 @@ const plugin = {
         respond(false, { error: 'Required params: "peer" (string), "path" (string)' });
         return;
       }
-      void sendLocalFileCore({
+      void sendUnifiedFileCore({
         peer: peerName,
         path: filePath,
-        name: typeof params?.name === "string" ? params.name : undefined,
         mimeType: typeof params?.mimeType === "string" ? params.mimeType : undefined,
         text: typeof params?.text === "string" ? params.text : undefined,
         agentId: typeof params?.agentId === "string" ? params.agentId : undefined,
-      }).then((result) => {
-        if (result.ok) {
-          respond(true, result);
-        } else {
-          // OpenClaw WS respond(ok, payload, error) — CLI reads error.message
-          respond(false, { error: result.error }, { message: result.error, code: "INVALID_REQUEST" });
-        }
-      }).catch((err: unknown) => {
+      }).then((result) => respondUnifiedSend(respond, result)).catch((err: unknown) => {
         const msg = err instanceof Error ? err.message : String(err);
         respond(false, { error: msg }, { message: msg, code: "UNAVAILABLE" });
       });
     });
-    api.logger.info("a2a-gateway: registered gateway method a2a.send_local_file");
+    api.logger.info("a2a-gateway: registered gateway method a2a.send_local_file (alias of unified send)");
 
     // ------------------------------------------------------------------
     // Registry: register / list (chat + CLI)
@@ -1268,30 +1930,76 @@ const plugin = {
     api.logger.info("a2a-gateway: registered gateway method a2a.registry.list");
 
     // ------------------------------------------------------------------
-    // Agent tool: a2a_send_file
-    // Lets the agent send a file (by URI) to a peer via A2A FilePart.
+    // Agent tool: a2a_send_file — local path via mode+Card; uri kept as legacy link send
     // ------------------------------------------------------------------
     if (api.registerTool) {
       const sendFileParams = {
         type: "object" as const,
-        required: ["peer", "uri"],
+        required: ["peer"],
         properties: {
           peer: { type: "string" as const, description: "Name of the target peer (must match a configured peer name)" },
-          uri: { type: "string" as const, description: "Public URL of the file to send" },
-          name: { type: "string" as const, description: "Filename (e.g. report.pdf)" },
-          mimeType: { type: "string" as const, description: "MIME type (e.g. application/pdf). Auto-detected from extension if omitted." },
+          path: {
+            type: "string" as const,
+            description:
+              "Absolute LOCAL path. Transport is chosen by fileTransfer.mode + peer Agent Card (auto/quic/tcp/base64).",
+          },
+          uri: { type: "string" as const, description: "Legacy public URL only. Prefer path for local files." },
+          name: { type: "string" as const, description: "Filename for URI sends (e.g. report.pdf)" },
+          mimeType: { type: "string" as const, description: "MIME type override (default: detected from extension)" },
           text: { type: "string" as const, description: "Optional text message to include alongside the file" },
-          agentId: { type: "string" as const, description: "Route to a specific agentId on the peer (OpenClaw extension). Omit to use the peer's default agent." },
+          agentId: { type: "string" as const, description: "Route to a specific agentId on the peer. Omit for default." },
         },
       };
 
       api.registerTool({
         name: "a2a_send_file",
-        description: "Send a file to a peer agent via A2A. The file is referenced by its public URL (URI). " +
-          "Use this when you need to transfer a document, image, or any file to another agent.",
+        description:
+          "Send a LOCAL file to a peer via A2A. Uses fileTransfer.mode (auto/quic/tcp/base64) and the peer Agent Card. " +
+          "After success, tell the user in Chinese that 发送完成, including peer and filename. Do not paste base64.",
         label: "A2A Send File",
         parameters: sendFileParams,
-        async execute(toolCallId, params) {
+        async execute(_toolCallId, params) {
+          if (typeof params.path === "string" && params.path) {
+            const result = await sendUnifiedFileCore({
+              peer: params.peer,
+              path: params.path,
+              mimeType: params.mimeType,
+              text: params.text,
+              agentId: params.agentId,
+            });
+            if (result.ok) {
+              const transport = "transport" in result ? String(result.transport) : "";
+              const name = "name" in result && result.name
+                ? String(result.name)
+                : path.basename(params.path);
+              const size = "size" in result && result.size != null
+                ? result.size
+                : ("sizeBytes" in result ? result.sizeBytes : "");
+              return {
+                content: [{
+                  type: "text" as const,
+                  text:
+                    `【A2A 发送完成】\n` +
+                    `对端 peer: ${params.peer}\n` +
+                    `文件: ${name}\n` +
+                    `传输: ${transport || "ok"}\n` +
+                    `大小: ${size}\n` +
+                    `\n请在聊天窗口用中文明确告知用户：发送完成。`,
+                }],
+                details: result,
+              };
+            }
+            return {
+              content: [{ type: "text" as const, text: `【A2A 发送失败】${result.error}` }],
+              details: result,
+            };
+          }
+          if (typeof params.uri !== "string" || !params.uri) {
+            return {
+              content: [{ type: "text" as const, text: "Required: local path (preferred) or public uri" }],
+              details: { ok: false },
+            };
+          }
           const peer = findPeer(params.peer);
           if (!peer) {
             const available = getEffectivePeers().map((p) => p.name).join(", ") || "(none)";
@@ -1301,7 +2009,6 @@ const plugin = {
             };
           }
 
-          // Security checks: SSRF, MIME, file size
           const uriCheck = await validateUri(params.uri, config.security);
           if (!uriCheck.ok) {
             return {
@@ -1370,42 +2077,44 @@ const plugin = {
         },
       });
 
-      // Agent tool: a2a_send_local_file (uses sendLocalFileCore defined above)
+      // Alias tool → same unified local-path send
       api.registerTool({
         name: "a2a_send_local_file",
         description:
-          "Send a LOCAL file to a peer via A2A by reading the filesystem path (base64 FilePart). " +
-          "Use this for Desktop/Photo/gallery files on this device. Do NOT use a2a_send_file for local paths. " +
-          "Does not require SoftBus pairing. Peer names: use configured A2A peers (e.g. HW-PC1 / HW-Phone1). " +
-          "After success, tell the user in Chinese that 发送完成, including peer name and filename.",
+          "Alias of a2a_send_file for LOCAL paths. Prefer a2a_send_file. Transport follows fileTransfer.mode + peer Agent Card.",
         label: "A2A Send Local File",
         parameters: {
           type: "object" as const,
           required: ["peer", "path"],
           properties: {
             peer: { type: "string" as const, description: "Name of the target peer (must match a configured peer name)" },
-            path: { type: "string" as const, description: "Absolute local file path on this device (e.g. /storage/media/.../Photo/16/IMG.jpg). Wire filename = basename(path)." },
-            name: { type: "string" as const, description: "Ignored: transmission filename is always basename(path) so peer saves the same name." },
+            path: { type: "string" as const, description: "Absolute local file path on this device" },
+            name: { type: "string" as const, description: "Ignored: transmission filename is always basename(path)." },
             mimeType: { type: "string" as const, description: "MIME type override (default: detected from extension)" },
             text: { type: "string" as const, description: "Optional text message to include alongside the file" },
             agentId: { type: "string" as const, description: "Route to a specific agentId on the peer. Omit for default." },
           },
         },
         async execute(_toolCallId, params) {
-          const result = await sendLocalFileCore(params);
+          const result = await sendUnifiedFileCore({
+            peer: params.peer,
+            path: params.path,
+            mimeType: params.mimeType,
+            text: params.text,
+            agentId: params.agentId,
+          });
           if (result.ok) {
+            const name = "name" in result && result.name ? String(result.name) : path.basename(params.path);
+            const transport = "transport" in result ? String(result.transport) : "";
             return {
               content: [{
                 type: "text" as const,
                 text:
                   `【A2A 发送完成】\n` +
                   `对端 peer: ${params.peer}\n` +
-                  `本地源路径: ${result.path}\n` +
-                  `文件名: ${result.name}\n` +
-                  `MIME: ${result.mimeType}\n` +
-                  `大小: ${result.sizeBytes} bytes\n` +
-                  `\n` +
-                  `请在聊天窗口用中文明确告知用户：发送完成（含 peer 名与文件名）。不要贴 base64。`,
+                  `文件名: ${name}\n` +
+                  `传输: ${transport || "ok"}\n` +
+                  `\n请在聊天窗口用中文明确告知用户：发送完成（含 peer 名与文件名）。不要贴 base64。`,
               }],
               details: result,
             };
@@ -1413,9 +2122,7 @@ const plugin = {
           return {
             content: [{
               type: "text" as const,
-              text:
-                `【A2A 发送失败】${result.error}\n` +
-                `请在聊天窗口用中文告知用户发送失败及原因。`,
+              text: `【A2A 发送失败】${result.error}\n请在聊天窗口用中文告知用户发送失败及原因。`,
             }],
             details: result,
           };
@@ -1704,6 +2411,22 @@ const plugin = {
       async stop(_ctx) {
         // Stop mDNS self-advertisement (sends goodbye packet)
         mdnsResponder?.stop();
+
+        // Stop accepting useful progress from active file receivers and give
+        // their shared cleanup path a bounded chance to remove partial files.
+        const activeReceiveCompletions = [...activeFileReceives.values()].map((active) => {
+          active.cancel("gateway shutting down");
+          return active.completed;
+        });
+        if (activeReceiveCompletions.length > 0) {
+          await Promise.race([
+            Promise.allSettled(activeReceiveCompletions),
+            new Promise<void>((resolve) => {
+              const timer = setTimeout(resolve, 5_000);
+              timer.unref();
+            }),
+          ]);
+        }
 
         // Stop DNS-SD discovery (quorum manager stops the underlying DNS manager)
         if (quorumManager) {

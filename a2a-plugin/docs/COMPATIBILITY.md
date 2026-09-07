@@ -1,6 +1,6 @@
 # A2A Compatibility Matrix
 
-This document tracks interoperability between the OpenClaw A2A Gateway (`a2a-gateway`, package `openclaw-a2a` **1.4.3**) and other A2A protocol implementations.
+This document tracks interoperability between the OpenClaw A2A Gateway (`a2a-gateway`, package `openclaw-a2a` **1.6.2**) and other A2A protocol implementations.
 
 ## Protocol Coverage
 
@@ -24,7 +24,7 @@ This document tracks interoperability between the OpenClaw A2A Gateway (`a2a-gat
 
 | Implementation | Version | Agent Card | Message Send | Streaming | File Transfer | Status |
 |---|---|---|---|---|---|---|
-| **OpenClaw A2A Gateway** (this project) | 1.0.1 | Tested | Tested | Tested | Tested | Fully tested |
+| **OpenClaw A2A Gateway** (this project) | 1.6.2 | Tested | Tested | Tested | Tested (inline + tcp-v1 + quic-v7) | Device-accepted 1.6.0–1.6.2 |
 | **Google A2A Reference** (Python) | — | Untested | Untested | Untested | Untested | Planned |
 | **@a2a-js/sdk reference server** | 0.3.x | Untested | Untested | Untested | Untested | Planned |
 | **LangChain A2A adapter** | — | Untested | Untested | Untested | Untested | Not planned |

@@ -1,6 +1,6 @@
 {
   "name": "openclaw-a2a",
-  "version": "1.4.3",
+  "version": "1.6.2",
   "type": "module",
   "description": "OpenClaw A2A Gateway with embedded a2a-relay tunnel-client (fork; originals untouched)",
   "main": "index.ts",
@@ -21,8 +21,9 @@
   },
   "homepage": "https://github.com/Keanu2/Openclaw-A2A#readme",
   "scripts": {
-    "test": "npx tsx --test tests/*.test.ts",
-    "test:tunnel": "npx tsx --test tests/tunnel-integration.test.ts",
+    "test": "npx tsx --import ./tests/os-userinfo-shim.cjs --test tests/*.test.ts",
+    "test:file-transfer": "npx tsx --import ./tests/os-userinfo-shim.cjs --test tests/file-transfer-*.test.ts",
+    "test:tunnel": "npx tsx --import ./tests/os-userinfo-shim.cjs --test tests/tunnel-integration.test.ts",
     "smoke:tunnel": "npx tsx scripts/tunnel-smoke.ts",
     "pack:release": "npm pack"
   },

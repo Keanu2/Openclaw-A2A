@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.6.2] - 2026-09-07
+
+### Fixed
+
+- TCP commit on HarmonyOS `Docs/OPENCLAW`: if `link(2)` returns `EPERM`/`EXDEV`, fall back to `rename` then `copyFile` so `tcp-v1` can land on shared media filesystems.
+
 ## [1.6.1] - 2026-09-04
 
 ### Fixed

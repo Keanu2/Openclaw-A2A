@@ -198,7 +198,37 @@ export async function commitPartNoClobber(
       await fs.promises.link(partPath, candidate);
       afterLink?.(candidate);
     } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === "EEXIST") continue;
+      const code = (error as NodeJS.ErrnoException).code;
+      if (code === "EEXIST") continue;
+      // HarmonyOS Docs/OPENCLAW (hmdfs/sharefs) often rejects hard links with EPERM.
+      // Fall back to rename, then copy+unlink, while keeping no-clobber semantics.
+      if (code === "EPERM" || code === "ENOTSUP" || code === "EXDEV" || code === "EACCES") {
+        try {
+          await fs.promises.rename(partPath, candidate);
+          afterLink?.(candidate);
+        } catch (renameErr) {
+          const rcode = (renameErr as NodeJS.ErrnoException).code;
+          if (rcode === "EEXIST") continue;
+          if (rcode === "EXDEV" || rcode === "EPERM" || rcode === "ENOTSUP" || rcode === "EACCES") {
+            try {
+              await fs.promises.copyFile(partPath, candidate);
+            } catch (copyErr) {
+              if ((copyErr as NodeJS.ErrnoException).code === "EEXIST") continue;
+              throw copyErr;
+            }
+            afterLink?.(candidate);
+            await syncDirectory(receiveDir);
+            await fs.promises.rm(partPath, { force: true });
+            await syncDirectory(receiveDir);
+            return candidate;
+          }
+          throw renameErr;
+        }
+        await syncDirectory(receiveDir);
+        await fs.promises.rm(partPath, { force: true }).catch(() => undefined);
+        await syncDirectory(receiveDir);
+        return candidate;
+      }
       throw error;
     }
     // Only link(2)'s EEXIST means that the candidate name is occupied. Keep

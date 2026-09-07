@@ -2,7 +2,7 @@
   "id": "a2a-gateway",
   "name": "A2A Gateway",
   "description": "OpenClaw A2A v0.3.0 gateway with optional embedded tunnel-client for NAT traversal",
-  "version": "1.6.1",
+  "version": "1.6.2",
   "defaultConfig": {
     "agentCard": {
       "name": "OpenClaw A2A Gateway",

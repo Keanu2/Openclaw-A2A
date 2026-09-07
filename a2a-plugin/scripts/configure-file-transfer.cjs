@@ -3,10 +3,14 @@
 const fs = require("node:fs");
 const path = require("node:path");
 
-const [configPath, receiveDir, mode = "auto"] = process.argv.slice(2);
-if (!configPath || !receiveDir) {
-  throw new Error("usage: node configure-file-transfer.cjs CONFIG_PATH RECEIVE_DIR [mode]");
+const [configPath, receiveDirArg, mode = "auto"] = process.argv.slice(2);
+if (!configPath) {
+  throw new Error(
+    "usage: node configure-file-transfer.cjs CONFIG_PATH [RECEIVE_DIR] [mode]\n" +
+      "default RECEIVE_DIR: /storage/media/100/local/files/Docs/OPENCLAW",
+  );
 }
+const receiveDir = receiveDirArg || "/storage/media/100/local/files/Docs/OPENCLAW";
 const config = JSON.parse(fs.readFileSync(configPath, "utf8"));
 const plugin = config.plugins?.entries?.["a2a-gateway"]?.config;
 if (!plugin) throw new Error("a2a-gateway config not found");

@@ -1,6 +1,6 @@
 {
   "name": "openclaw-a2a",
-  "version": "1.6.1",
+  "version": "1.6.2",
   "type": "module",
   "description": "OpenClaw A2A Gateway with embedded a2a-relay tunnel-client (fork; originals untouched)",
   "main": "index.ts",

@@ -78,4 +78,18 @@ git push -u origin HEAD
 
 ---
 
+## 旁边几个仓怎么钉（不要混进本仓 tag）
+
+插件、注册中心、QUIC 是三个仓库。本仓的 `a2a-*` tag **不管** 注册中心版本。
+
+| 仓 | 当前看哪 |
+|----|----------|
+| 本仓库 | 上面这张表；日常 `main` / tag `a2a-1.6.2` |
+| [agent-registry-relay](https://github.com/Keanu2/agent-registry-relay) | [`TAGS.md`](https://github.com/Keanu2/agent-registry-relay/blob/main/TAGS.md)；当前钉 `live-edge-2026-09-08` |
+| [a2a-raw-quic-stream](https://github.com/Keanu2/a2a-raw-quic-stream) | tag `v7-2026-09-02`（1.6.x 线协议未改） |
+
+现网边车 **没有**改成从 GitHub 拉代码跑。GitHub 上的 `live-edge-*` 是从服务器拷出来的快照，服务器进程仍是原来的安装目录。
+
+---
+
 要代码日常：`main`。要「那一版长什么样」：上表的 **tag**。要在那一版上改：从 tag **新建分支**。

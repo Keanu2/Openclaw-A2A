@@ -3,10 +3,63 @@
 先记住三句话：
 
 1. **日常只看 `main`。** 那就是当前代码。
-2. **版本号看 tag / GitHub Release**（`a2a-1.6.2`、`a2a-1.4.3`）。
-3. **其它分支都是历史或开发中途，不要当「当前产品」。**
+2. **旧版本看 tag**（名字不会丢）。不要靠 `feature/*` 草稿分支记版本。
+3. **要在旧代码上开发：从 tag 新建一条分支**，不要改 tag 本身。
 
-`分支` ≠ `版本`。分支会动；tag 钉死某一个提交。
+`分支` 会往前走；`tag` 钉死某一次提交。所以「哪次提交 = 哪一版」以 tag 为准。
+
+---
+
+## 版本 → 提交（以后回旧代码看这里）
+
+| 版本 | 永久名字 | 提交 | 网页上看代码 |
+|------|----------|------|----------------|
+| **1.6.2**（当前推荐） | tag `a2a-1.6.2` | `a81ef87` | https://github.com/Keanu2/Openclaw-A2A/tree/a2a-1.6.2 |
+| **1.6.1**（含 1.6.0） | tag `a2a-1.6.1` | `5b65213` | https://github.com/Keanu2/Openclaw-A2A/tree/a2a-1.6.1 |
+| **1.4.3** 安装包冻结点 | tag `a2a-1.4.3` | `241edd6` | https://github.com/Keanu2/Openclaw-A2A/tree/a2a-1.4.3 |
+| 升级前的旧 `main` | 分支 `archive/main-pre-1.6.2` | `31f37cf` | https://github.com/Keanu2/Openclaw-A2A/tree/archive/main-pre-1.6.2 |
+| 1.5.1 / 1.5.2 说明 | 私有仓已归档 Release | — | [v1.5.1](https://github.com/Keanu2/Openclaw-A2A-private/releases/tag/v1.5.1-file-transfer) / [v1.5.2](https://github.com/Keanu2/Openclaw-A2A-private/releases/tag/v1.5.2-tcp-device-fix) |
+
+`main` 会继续往前（文档、下个版本）。**某一版的代码以同名 tag 为准**，不要用「当时的 main」当版本号。
+
+---
+
+## 为什么删了 `feature/*`，旧代码还在
+
+删的是**草稿分支的名字**，不是提交，也不是 tag。
+
+| 当时的草稿名 | 它其实是什么 | 现在用什么代替 |
+|--------------|--------------|----------------|
+| `feature/file-transfer-1.6.2` | 合入 `main` 的 PR 分支 | tag `a2a-1.6.2`（`a81ef87`） |
+| `feature/file-transfer-1.6.1` | 1.6.0/1.6.1 发布提交 | tag `a2a-1.6.1`（`5b65213`） |
+| `feature/file-transfer-1.6.0` | 1.6.0 中途稿（后来打进 1.6.1） | 看 `a2a-1.6.1`，不要单独找 1.6.0 草稿 |
+| `feature/a2a-tcp-file-stream-v1` | 最早 TCP 线 | 已在 `main` 历史里；产品钉是后面的 1.5/1.6 tag |
+
+那些 `feature/*` **不是**版本目录。同一条 feature 分支被推过多次，尖上的提交会变；tag 不会变。
+
+---
+
+## 要在旧代码上开发（不要改 tag）
+
+在 `D:\openclaw\Openclaw-A2A`：
+
+```powershell
+git fetch origin --tags
+git switch main
+
+# 从某一版钉开一条新维修线（名字自定）
+git switch -c hotfix/1.4.3-说明 a2a-1.4.3
+# 或
+git switch -c hotfix/1.6.1-说明 a2a-1.6.1
+# 或
+git switch -c hotfix/1.6.2-说明 a2a-1.6.2
+
+git push -u origin HEAD
+```
+
+做完回日常：`git switch main`。
+
+不要：`git switch archive/main-pre-1.6.2` 然后直接改（那是只读快照）。要旧安装包线，从 `a2a-1.4.3` 开新分支。
 
 ---
 
@@ -14,70 +67,15 @@
 
 | 名字 | 类型 | 干什么 |
 |------|------|--------|
-| [`main`](https://github.com/Keanu2/Openclaw-A2A/tree/main) | 默认分支 | **当前推荐线。** 现在等于插件 **1.6.2**。以后新功能也往这里合。 |
-| [`a2a-1.6.2`](https://github.com/Keanu2/Openclaw-A2A/releases/tag/a2a-1.6.2) | tag + Release | **当前版本钉。** 「1.6.2 是哪次提交、说明在哪」看这个。 |
-
----
-
-## 旧版本（不要和 `main` 搞混）
-
-| 名字 | 类型 | 干什么 |
-|------|------|--------|
-| [`a2a-1.4.3`](https://github.com/Keanu2/Openclaw-A2A/releases/tag/a2a-1.4.3) | tag + Release | **1.4.3 产品版本钉。** 旧定制安装包/插件冻结点。要「当年发的 1.4.3 是什么」看这个。 |
-| [`archive/main-pre-1.6.2`](https://github.com/Keanu2/Openclaw-A2A/tree/archive/main-pre-1.6.2) | 只读分支 | **把 `main` 改成 1.6.2 之前，默认分支的最后样子。** 比 `a2a-1.4.3` 多一笔后来加的仓库地图文档。只用来对照旧 `main`，**不要基于它开发。** |
-
-关系：
-
-```text
-tag a2a-1.4.3          1.4.3 冻结点
-        │
-        │  + 一笔 README（相关仓库地图）
-        ▼
-archive/main-pre-1.6.2   升级前的旧 main
-        │
-        │  + 整段 1.5 / 1.6 文件传输
-        ▼
-main / tag a2a-1.6.2     现在的推荐线
-```
-
----
-
-## 已删掉的开发草稿分支
-
-这些 `feature/*` 已从公开仓删除，**不影响回档**。内容早在 `main` / tag 里。
-
-曾存在：`feature/file-transfer-1.6.0`、`1.6.1`、`1.6.2`，以及 `feature/a2a-tcp-file-stream-v1`。
+| [`main`](https://github.com/Keanu2/Openclaw-A2A/tree/main) | 默认分支 | **当前推荐线。** 现在等于插件 **1.6.2** 再加之后的文档。新功能往这里合。 |
+| [`a2a-1.6.2`](https://github.com/Keanu2/Openclaw-A2A/releases/tag/a2a-1.6.2) | tag + Release | **1.6.2 代码钉。** |
 
 ---
 
 ## 已归档的私有镜像 [Openclaw-A2A-private](https://github.com/Keanu2/Openclaw-A2A-private)
 
-**不要再当工作仓。** 已 GitHub Archive（只读）。和公开仓曾是同一棵树；现在只为保留 1.5.x Release。
-
-| 名字 | 干什么 |
-|------|--------|
-| `v1.5.1-file-transfer` | 1.5.1 文件传输第一次验收线（只读 Release） |
-| `v1.5.2-tcp-device-fix` | TCP 真机加固（只读 Release） |
-| `main` / `release/1.6.2` | 归档瞬间与公开仓同 tip，**不要再推** |
-| `release/1.6.1` | 1.6.1 发布时的钉 |
+**不要再当工作仓。** 已 GitHub Archive。只留 1.5.x Release 备查。
 
 ---
 
-## Tag / Release 一览
-
-| Tag / Release | 仓库 | 含义 |
-|---------------|------|------|
-| `a2a-1.6.2` | 公开 | 当前推荐版本 |
-| `a2a-1.4.3` | 公开 | 旧安装包基线 |
-| `v1.5.1-file-transfer` | 已归档私有仓 | 1.5.1 文件传输第一次验收线 |
-| `v1.5.2-tcp-device-fix` | 已归档私有仓 | TCP 真机加固 |
-
----
-
-## 不要用这些当「当前」
-
-- 任意已删除的 `feature/*`、私有仓上的 `release/1.6.1`
-- `archive/*`（只读历史）
-- 本地未推送的 `wip/*`（只是某次对齐前的临时保存）
-
-要代码：`main`。要版本说明：对应的 **GitHub Release**。
+要代码日常：`main`。要「那一版长什么样」：上表的 **tag**。要在那一版上改：从 tag **新建分支**。

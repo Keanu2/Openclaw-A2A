@@ -16,6 +16,7 @@ OpenClaw 定制发行 + 内置 **A2A Gateway** 插件。当前推荐线是 **`ma
 | 当前版本说明 | GitHub Release [`a2a-1.6.2`](https://github.com/Keanu2/Openclaw-A2A/releases/tag/a2a-1.6.2) |
 | 全部变更 | [`a2a-plugin/CHANGELOG.md`](./a2a-plugin/CHANGELOG.md) |
 | 真机验收 | [`a2a-plugin/docs/`](./a2a-plugin/docs/) |
+| 旧版代码（1.6.1 / 1.4.3） | tag [`a2a-1.6.1`](https://github.com/Keanu2/Openclaw-A2A/tree/a2a-1.6.1) / [`a2a-1.4.3`](https://github.com/Keanu2/Openclaw-A2A/tree/a2a-1.4.3)；对照表见 [`BRANCHES.md`](./BRANCHES.md) |
 | 旧安装包基线（1.4.3） | tag / Release [`a2a-1.4.3`](https://github.com/Keanu2/Openclaw-A2A/releases/tag/a2a-1.4.3) |
 | 升级前的旧 `main` 快照 | 只读分支 [`archive/main-pre-1.6.2`](https://github.com/Keanu2/Openclaw-A2A/tree/archive/main-pre-1.6.2)（不要基于它开发） |
 | **每条分支 / tag 是什么** | 看 [`BRANCHES.md`](./BRANCHES.md) |
@@ -35,7 +36,7 @@ OpenClaw 定制发行 + 内置 **A2A Gateway** 插件。当前推荐线是 **`ma
 | 版本 | 一句话 | CHANGELOG | 真机验收 | GitHub Release |
 |------|--------|-----------|----------|----------------|
 | **1.6.2**（当前） | Docs/OPENCLAW 上 TCP `link(2)` EPERM 回退 | [1.6.2](./a2a-plugin/CHANGELOG.md) | [验收](./a2a-plugin/docs/FILE-TRANSFER-1.6.2-DEVICE-ACCEPTANCE-2026-09-07.md) | [`a2a-1.6.2`](https://github.com/Keanu2/Openclaw-A2A/releases/tag/a2a-1.6.2) |
-| **1.6.1** | 等 `DATA_COMMITTED` 再发 `a2a-transfer://` | [1.6.1](./a2a-plugin/CHANGELOG.md) | [验收](./a2a-plugin/docs/FILE-TRANSFER-1.6.1-DEVICE-ACCEPTANCE-2026-09-04.md) | 并入 1.6.2 Release 说明 |
+| **1.6.1** | 等 `DATA_COMMITTED` 再发 `a2a-transfer://` | [1.6.1](./a2a-plugin/CHANGELOG.md) | [验收](./a2a-plugin/docs/FILE-TRANSFER-1.6.1-DEVICE-ACCEPTANCE-2026-09-04.md) | tag [`a2a-1.6.1`](https://github.com/Keanu2/Openclaw-A2A/tree/a2a-1.6.1) |
 | **1.6.0** | Unified `fileTransfer.mode` + Agent Card 选路 | [1.6.0](./a2a-plugin/CHANGELOG.md) | [验收](./a2a-plugin/docs/FILE-TRANSFER-1.6.0-DEVICE-ACCEPTANCE-2026-09-03.md) | 并入 1.6.2 Release 说明 |
 | **1.5.2** | TCP 真机加固 | CHANGELOG / 紧急修复记录 | — | 私有仓 [`v1.5.2-tcp-device-fix`](https://github.com/Keanu2/Openclaw-A2A-private/releases/tag/v1.5.2-tcp-device-fix) |
 | **1.5.1** | 合同层 + `quic-v7` | [1.5.1](./a2a-plugin/CHANGELOG.md) | [验收](./a2a-plugin/docs/FILE-TRANSFER-1.5.1-DEVICE-ACCEPTANCE-2026-09-03.md) | 私有仓 [`v1.5.1-file-transfer`](https://github.com/Keanu2/Openclaw-A2A-private/releases/tag/v1.5.1-file-transfer) |

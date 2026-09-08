@@ -52,8 +52,8 @@ OpenClaw 定制发行 + 内置 **A2A Gateway** 插件。当前推荐线是 **`ma
 | 本仓库 | OpenClaw 定制 + A2A 插件 + File Relay 源码（`server/file-relay.js`）+ 安装包 |
 | [Openclaw-A2A-private](https://github.com/Keanu2/Openclaw-A2A-private) | **已 Archive。** 只留 1.5.x Release 备查，不要再推代码 |
 | [a2a-raw-quic-stream](https://github.com/Keanu2/a2a-raw-quic-stream) | QUIC 中继 + 设备 helper（tag `v7-2026-09-02`）；1.6.x 线协议未改 |
-| [agent-registry-relay](https://github.com/Keanu2/agent-registry-relay) | **独立仓**（已脱离 fork）。当前钉 tag [`live-edge-2026-09-08`](https://github.com/Keanu2/agent-registry-relay/releases/tag/live-edge-2026-09-08)；对照表 [`TAGS.md`](https://github.com/Keanu2/agent-registry-relay/blob/main/TAGS.md) |
-| [agent-registry-relay-server-backup](https://github.com/Keanu2/agent-registry-relay-server-backup) | 私有历史快照。现网源码以公开仓 `live-edge-*` 为准；这个仓建议 Archive，不要再当工作仓 |
+| [agent-registry-relay](https://github.com/Keanu2/agent-registry-relay) | **独立仓**（已脱离 fork）。当前钉 tag [`live-edge-2026-09-08`](https://github.com/Keanu2/agent-registry-relay/releases/tag/live-edge-2026-09-08)；对照表 [`TAGS.md`](https://github.com/Keanu2/agent-registry-relay/blob/main/TAGS.md)。现网边车从本仓 `main` 的 clone 跑 |
+| [agent-registry-relay-server-backup](https://github.com/Keanu2/agent-registry-relay-server-backup) | **已 Archive。** 私有历史快照，不要再推代码 |
 | [a2a-nginx-h3-putget](https://github.com/Keanu2/a2a-nginx-h3-putget) 等 | 私有归档：HTTP/3 对照实验，已冻结 |
 
 边车 File Relay 与 QUIC 中继**不跟每个插件小版本各打一份服务器 Release**。1.6.x 只改设备侧插件；服务器继续用现网 File Relay + QUIC v7。

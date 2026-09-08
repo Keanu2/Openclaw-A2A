@@ -88,7 +88,7 @@ git push -u origin HEAD
 | [agent-registry-relay](https://github.com/Keanu2/agent-registry-relay) | [`TAGS.md`](https://github.com/Keanu2/agent-registry-relay/blob/main/TAGS.md)；当前钉 `live-edge-2026-09-08` |
 | [a2a-raw-quic-stream](https://github.com/Keanu2/a2a-raw-quic-stream) | tag `v7-2026-09-02`（1.6.x 线协议未改） |
 
-现网边车 **没有**改成从 GitHub 拉代码跑。GitHub 上的 `live-edge-*` 是从服务器拷出来的快照，服务器进程仍是原来的安装目录。
+现网边车 `121.37.53.35` 的注册中心已改为本仓 clone：`/home/edge/apps/agent-registry-relay`（systemd `agentregistry`，venv `agentregistry-venv-github`）。旧目录 `/home/edge/apps/agent-protocol/AgentRegistry` 和旧 venv 仍留着回滚。QUIC `8008` 由用户 systemd `quiche-raw-relay-v7` 拉起（`linger=yes`）。
 
 ---
 

@@ -18,6 +18,7 @@ OpenClaw 定制发行 + 内置 **A2A Gateway** 插件。当前推荐线是 **`ma
 | 真机验收 | [`a2a-plugin/docs/`](./a2a-plugin/docs/) |
 | 旧安装包基线（1.4.3） | tag / Release [`a2a-1.4.3`](https://github.com/Keanu2/Openclaw-A2A/releases/tag/a2a-1.4.3) |
 | 升级前的旧 `main` 快照 | 只读分支 [`archive/main-pre-1.6.2`](https://github.com/Keanu2/Openclaw-A2A/tree/archive/main-pre-1.6.2)（不要基于它开发） |
+| **每条分支 / tag 是什么** | 看 [`BRANCHES.md`](./BRANCHES.md) |
 
 公开仓与私有镜像是**同一棵树**：
 

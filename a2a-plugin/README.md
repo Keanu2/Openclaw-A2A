@@ -34,6 +34,19 @@ npm install -g --omit=dev /data/local/tmp/openclaw-2026.3.13.tgz
 本目录是插件源（**1.6.2**），可同步到
 `../openclaw-source/extensions/a2a-gateway` 后重新打包完整安装包。
 
+## 版本说明在哪里
+
+| 版本 | 看什么 | GitHub Release |
+|------|--------|----------------|
+| **1.6.2**（当前） | [CHANGELOG](./CHANGELOG.md) · [验收](./docs/FILE-TRANSFER-1.6.2-DEVICE-ACCEPTANCE-2026-09-07.md) | 暂无；说明在 [PR #2](https://github.com/Keanu2/Openclaw-A2A/pull/2) |
+| **1.6.1** | [CHANGELOG](./CHANGELOG.md) · [验收](./docs/FILE-TRANSFER-1.6.1-DEVICE-ACCEPTANCE-2026-09-04.md) | 暂无；同上 PR |
+| **1.6.0** | [CHANGELOG](./CHANGELOG.md) · [验收](./docs/FILE-TRANSFER-1.6.0-DEVICE-ACCEPTANCE-2026-09-03.md) | 暂无；同上 PR |
+| **1.5.2** | TCP 加固 Release 说明 | 私有仓 [v1.5.2-tcp-device-fix](https://github.com/Keanu2/Openclaw-A2A-private/releases/tag/v1.5.2-tcp-device-fix) |
+| **1.5.1** | [CHANGELOG](./CHANGELOG.md) · [验收](./docs/FILE-TRANSFER-1.5.1-DEVICE-ACCEPTANCE-2026-09-03.md) | 私有仓 [v1.5.1-file-transfer](https://github.com/Keanu2/Openclaw-A2A-private/releases/tag/v1.5.1-file-transfer) |
+| **1.4.3** | 冻结定制包 | 公开仓 [a2a-1.4.3](https://github.com/Keanu2/Openclaw-A2A/releases/tag/a2a-1.4.3) |
+
+仓库根 README 有更完整的对照表。公开仓与私有镜像是同树；私有仓曾用名 `Openclaw-A2A-file-transfer`。
+
 ## 文档
 
 | 文档 | 说明 |
@@ -42,7 +55,7 @@ npm install -g --omit=dev /data/local/tmp/openclaw-2026.3.13.tgz
 | [`../installer/README-安装与使用.md`](../installer/README-安装与使用.md) | 完整安装与配置说明 |
 | [docs/操作手册.md](./docs/操作手册.md) | 细节与用例 |
 | [docs/README.md](./docs/README.md) | 文档索引（含文件传输验收） |
-| [CHANGELOG.md](./CHANGELOG.md) | 版本变更 |
+| [CHANGELOG.md](./CHANGELOG.md) | 版本变更（权威文字说明） |
 | [`../TCP-FILE-STREAM.md`](../TCP-FILE-STREAM.md) | 文件数据面版本快照 |
 
 ## License

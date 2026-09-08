@@ -20,10 +20,8 @@ OpenClaw 定制发行 + 内置 **A2A Gateway** 插件。当前推荐线是 **`ma
 | 升级前的旧 `main` 快照 | 只读分支 [`archive/main-pre-1.6.2`](https://github.com/Keanu2/Openclaw-A2A/tree/archive/main-pre-1.6.2)（不要基于它开发） |
 | **每条分支 / tag 是什么** | 看 [`BRANCHES.md`](./BRANCHES.md) |
 
-公开仓与私有镜像是**同一棵树**：
-
-- 公开：[Keanu2/Openclaw-A2A](https://github.com/Keanu2/Openclaw-A2A)
-- 私有镜像：[Keanu2/Openclaw-A2A-private](https://github.com/Keanu2/Openclaw-A2A-private)（曾用名 `Openclaw-A2A-file-transfer`）
+日常只使用公开仓：[Keanu2/Openclaw-A2A](https://github.com/Keanu2/Openclaw-A2A)。  
+旧私有镜像 [Openclaw-A2A-private](https://github.com/Keanu2/Openclaw-A2A-private) 已 **Archive**，只留 1.5.x Release 备查。
 
 ## 版本与发布
 
@@ -51,7 +49,7 @@ OpenClaw 定制发行 + 内置 **A2A Gateway** 插件。当前推荐线是 **`ma
 | 仓库 | 用途 |
 |------|------|
 | 本仓库 | OpenClaw 定制 + A2A 插件 + File Relay 源码（`server/file-relay.js`）+ 安装包 |
-| [Openclaw-A2A-private](https://github.com/Keanu2/Openclaw-A2A-private) | 本仓库的私有镜像（同 tip） |
+| [Openclaw-A2A-private](https://github.com/Keanu2/Openclaw-A2A-private) | **已 Archive。** 只留 1.5.x Release 备查，不要再推代码 |
 | [a2a-raw-quic-stream](https://github.com/Keanu2/a2a-raw-quic-stream) | QUIC 中继 + 设备 helper（tag `v7-2026-09-02`）；1.6.x 线协议未改 |
 | [agent-registry-relay](https://github.com/Keanu2/agent-registry-relay) | 注册中心与可选 Relay（tag `v0.3.3`） |
 | [agent-registry-relay-server-backup](https://github.com/Keanu2/agent-registry-relay-server-backup) | 私有：线上服务器源码快照 |

@@ -57,17 +57,16 @@ main / tag a2a-1.6.2     现在的推荐线
 
 ---
 
-## 私有镜像仓 [Openclaw-A2A-private](https://github.com/Keanu2/Openclaw-A2A-private)
+## 已归档的私有镜像 [Openclaw-A2A-private](https://github.com/Keanu2/Openclaw-A2A-private)
 
-和公开仓是**同一棵树**，不是另一套产品。
+**不要再当工作仓。** 已 GitHub Archive（只读）。和公开仓曾是同一棵树；现在只为保留 1.5.x Release。
 
 | 名字 | 干什么 |
 |------|--------|
-| `main` | 与公开仓 `main` 对齐（当前 1.6.2） |
-| `release/1.6.2` | 1.6.2 的别名，现与 `main` 同 tip |
-| `release/1.6.1` | 1.6.1 发布时的钉，已被 1.6.2 取代 |
-| `archive/main-pre-1.6.2` | 与公开仓同名的旧 main 快照 |
-| `v1.5.1-file-transfer` / `v1.5.2-tcp-device-fix` | 私有仓早期 Release（1.5.x） |
+| `v1.5.1-file-transfer` | 1.5.1 文件传输第一次验收线（只读 Release） |
+| `v1.5.2-tcp-device-fix` | TCP 真机加固（只读 Release） |
+| `main` / `release/1.6.2` | 归档瞬间与公开仓同 tip，**不要再推** |
+| `release/1.6.1` | 1.6.1 发布时的钉 |
 
 ---
 
@@ -75,7 +74,7 @@ main / tag a2a-1.6.2     现在的推荐线
 
 | Tag / Release | 仓库 | 含义 |
 |---------------|------|------|
-| `a2a-1.6.2` | 公开 + 私有 | 当前推荐版本 |
+| `a2a-1.6.2` | 公开 | 当前推荐版本 |
 | `a2a-1.4.3` | 公开 | 旧安装包基线 |
 | `v1.5.1-file-transfer` | 私有（公开仓也有同名 tag） | 1.5.1 文件传输第一次验收线 |
 | `v1.5.2-tcp-device-fix` | 私有（公开仓也有同名 tag） | TCP 真机加固 |

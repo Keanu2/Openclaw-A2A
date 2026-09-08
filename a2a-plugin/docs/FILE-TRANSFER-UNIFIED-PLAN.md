@@ -3,7 +3,7 @@
 - 日期：2026-09-03（后续补丁见下）
 - 状态：**已实施（插件 1.6.0）**；补丁 **1.6.1**（notify 竞态）、**1.6.2**（Docs/OPENCLAW hard-link 回退）；边车侧仍只需核对 registry metadata / QUIC systemd
 - 当前插件版本：`openclaw-a2a@1.6.2`
-- 代码仓：`Keanu2/Openclaw-A2A`（公开）/ `Keanu2/Openclaw-A2A-private`（私有镜像；曾用名 `Openclaw-A2A-file-transfer`）
+- 代码仓：`Keanu2/Openclaw-A2A`（公开，日常只看这个）。`Keanu2/Openclaw-A2A-private` 已 Archive，只留 1.5.x Release。
 - QUIC helper/中继仓：`Keanu2/a2a-raw-quic-stream`
 - 边车示例：`121.37.53.35`
 - 线协议兼容现网 1.5.x：prepare 路径、`tcp-v1` / `quic-v7` / `inline-base64`、`a2a-transfer://` 不改

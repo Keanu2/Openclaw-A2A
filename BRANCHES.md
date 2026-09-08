@@ -42,18 +42,11 @@ main / tag a2a-1.6.2     现在的推荐线
 
 ---
 
-## 公开仓上还在的开发/历史分支
+## 已删掉的开发草稿分支
 
-这些是合入 `main` 前留下的中间线，**内容已被 `main` 覆盖或过时。** 只读，不要当起点。
+这些 `feature/*` 已从公开仓删除，**不影响回档**。内容早在 `main` / tag 里。
 
-| 分支 | 当时在做什么 | 现在怎么看 |
-|------|----------------|------------|
-| `feature/file-transfer-1.6.2` | 把 1.6.2 合进公开仓的 PR 分支 | 已合入 `main`，可忽略 |
-| `feature/file-transfer-1.6.1` | 1.6.0/1.6.1 中途线 | 已被 1.6.2 取代 |
-| `feature/file-transfer-1.6.0` | 更早的 Unified 中途线 | 已被 1.6.2 取代 |
-| `feature/a2a-tcp-file-stream-v1` | 最早的 TCP 文件流开发线 | 已被 1.5/1.6 取代 |
-
-以后清理时可以删这些 `feature/*`，不影响 `main` 和 tag。
+曾存在：`feature/file-transfer-1.6.0`、`1.6.1`、`1.6.2`，以及 `feature/a2a-tcp-file-stream-v1`。
 
 ---
 
@@ -83,7 +76,7 @@ main / tag a2a-1.6.2     现在的推荐线
 
 ## 不要用这些当「当前」
 
-- 任意 `feature/*`、`release/1.6.1`
+- 任意已删除的 `feature/*`、私有仓上的 `release/1.6.1`
 - `archive/*`（只读历史）
 - 本地未推送的 `wip/*`（只是某次对齐前的临时保存）
 

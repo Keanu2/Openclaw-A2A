@@ -2,7 +2,7 @@
 
 本目录收录使用说明、兼容性说明、源码修改记录与代码审计记录。
 
-**各版本说明入口：** 仓库根 [README.md · 版本说明在哪里](../../README.md#版本说明在哪里)（CHANGELOG / 真机验收 / GitHub Release 对照）。当前插件 **1.6.2**；1.6.x 尚无独立 GitHub Release，以 CHANGELOG + 验收文档 + [PR #2](https://github.com/Keanu2/Openclaw-A2A/pull/2) 为准。
+**各版本说明入口：** 仓库根 [README.md](../../README.md)（`main` = 当前线；Release / CHANGELOG / 验收对照）。当前插件 **1.6.2**，公开 Release：[`a2a-1.6.2`](https://github.com/Keanu2/Openclaw-A2A/releases/tag/a2a-1.6.2)。
 
 | 文档 | 用途 |
 |------|------|

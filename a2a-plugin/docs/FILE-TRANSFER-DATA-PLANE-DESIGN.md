@@ -6,7 +6,7 @@
 - 当前基础：
   - 现网 A2A Gateway + WebSocket tunnel + `a2a_send_local_file`（inline-base64，默认 50 MiB）
   - raw QUIC v7 真机双向 10/100 MiB 已验证
-  - 文件传输仓：`Keanu2/Openclaw-A2A-file-transfer`（含 tcp-v1 / quic-v7 / inline-base64；原名 `Openclaw-A2A-tcp-file-stream`）
+  - 私有镜像仓：`Keanu2/Openclaw-A2A-private`（与公开仓同树；含 tcp-v1 / quic-v7 / inline-base64；曾用名 `Openclaw-A2A-file-transfer` / `Openclaw-A2A-tcp-file-stream`）
 
 ## 1. 决策摘要
 

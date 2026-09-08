@@ -1,7 +1,7 @@
 # 文件数据面 1.6.2 真机验收记录（Docs/OPENCLAW hard-link）
 
 - 日期：2026-09-07（Asia/Shanghai）
-- 客户端：`openclaw-a2a@1.6.2`（`Openclaw-A2A-file-transfer`）
+- 客户端：`openclaw-a2a@1.6.2`（`Openclaw-A2A-private`）
 - 基线：`openclaw-a2a@1.6.1`（notify 合同已修）
 - 设备：电脑 `53V0224C19002918`（tunnel `HW-Phone2`）、手机 `FMR0223926019410`（tunnel `HW-Phone1`）
 - 配置：两端临时 `fileTransfer.mode=tcp`；`receiveDir=/storage/media/100/local/files/Docs/OPENCLAW`（文件管理「文档/OPENCLAW」）；测完改回 `mode=auto`

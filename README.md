@@ -8,6 +8,8 @@
 | [`installer/`](./installer/) | OpenClaw 2026.3.13 定制安装包及安装说明 |
 | [`openclaw-source/`](./openclaw-source/) | 内置 A2A Gateway 的 OpenClaw 定制源码 |
 
+GitHub：公开仓 [Openclaw-A2A](https://github.com/Keanu2/Openclaw-A2A)；本树的私有镜像为 [Openclaw-A2A-private](https://github.com/Keanu2/Openclaw-A2A-private)（曾用名 Openclaw-A2A-file-transfer）。
+
 文件数据面版本快照见 [`TCP-FILE-STREAM.md`](./TCP-FILE-STREAM.md)；变更见 [`a2a-plugin/CHANGELOG.md`](./a2a-plugin/CHANGELOG.md)。
 
 ## 安装

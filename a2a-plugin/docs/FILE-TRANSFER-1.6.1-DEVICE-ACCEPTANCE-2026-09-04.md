@@ -1,7 +1,7 @@
 # 文件数据面 1.6.1 真机验收记录（notify 竞态）
 
 - 日期：2026-09-04～2026-09-06（Asia/Shanghai；插件日 09-04，真机复测至 09-06）
-- 客户端：`openclaw-a2a@1.6.1`（`Openclaw-A2A-file-transfer`）
+- 客户端：`openclaw-a2a@1.6.1`（`Openclaw-A2A-private`）
 - 基线：`openclaw-a2a@1.6.0` Unified `mode`+Card 选路
 - 设备：电脑 `53V0224C19002918`（tunnel `HW-Phone2`）、手机 `FMR0223926019410`（tunnel `HW-Phone1`）
 - 配置：流式开启；真机复测阶段 `fileTransfer.receiveDir=/data/local/.openclaw/a2a-files`（避开共享媒体 FS，聚焦 notify 合同）；QUIC helper `/data/local/tmp/a2a-rcp/rcp-raw-stream-v7`
